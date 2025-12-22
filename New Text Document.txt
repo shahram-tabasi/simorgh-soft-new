@@ -1,0 +1,23 @@
+simorgh-enhanced/
+├── src/
+│   ├── components/
+│   │   ├── OutputTypes/
+│   │   │   └── OutputTypesTab.tsx          ✨ جدید
+│   │   ├── DeviceSelection/
+│   │   │   ├── DeviceTable.tsx             ✨ بازنویسی کامل
+│   │   │   └── DeviceSelectionTab.tsx      ✨ بهبود
+│   │   ├── ProjectDefinition/
+│   │   ├── ProjectSelection/
+│   │   ├── TemplateCreation/
+│   │   └── Tabs/
+│   ├── context/
+│   │   └── ProjectContext.tsx              ✨ بهبود
+│   ├── types/
+│   │   └── project.ts                      ✨ بهبود
+│   ├── services/
+│   │   └── projectService.ts
+│   ├── App.tsx                             ✨ بازنویسی
+│   └── index.tsx
+├── README.md                                ✨ جدید
+├── IMPLEMENTATION.md                        ✨ جدید (این فایل)
+└── package.json                             ✨ بروز شده
