@@ -1,9 +1,10 @@
-// server.js - نسخه نهایی با فیلتر سازنده و اتصال SQL
+// server.js - نسخه نهایی با فیلتر سازنده و اتصال SQL + MySQL
 import express from 'express';
 import { MongoClient, ObjectId } from 'mongodb';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import sql from 'mssql';
+import mysql from 'mysql2/promise';
 
 dotenv.config();
 
@@ -79,6 +80,41 @@ async function connectToSqlServer() {
 }
 
 // ============================================
+// MySQL Connection (TPMS Database - READ-ONLY)
+// ============================================
+const mysqlConfig = {
+  host: process.env.MYSQL_HOST || '192.168.1.148',
+  port: parseInt(process.env.MYSQL_PORT) || 3306,
+  database: process.env.MYSQL_DATABASE || 'TPMS',
+  user: process.env.MYSQL_USER || 'technical',
+  password: process.env.MYSQL_PASSWORD || 'HoJETA',
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0
+};
+
+let mysqlPool;
+
+// Connect to MySQL (READ-ONLY)
+async function connectToMySql() {
+  try {
+    if (!mysqlPool) {
+      console.log("🔄 Connecting to MySQL (TPMS)...");
+      mysqlPool = mysql.createPool(mysqlConfig);
+      // Test connection
+      const connection = await mysqlPool.getConnection();
+      connection.release();
+      console.log("✅ Connected to MySQL (TPMS) successfully!");
+    }
+    return mysqlPool;
+  } catch (err) {
+    console.error("❌ MySQL connection error:", err.message);
+    mysqlPool = null;
+    throw err;
+  }
+}
+
+// ============================================
 // Existing Routes (unchanged)
 // ============================================
 app.get('/api/projects', async (req, res) => {
@@ -119,7 +155,7 @@ app.get('/api/health', async (req, res) => {
   try {
     const count = await db.collection('projects').countDocuments();
 
-    // Also check SQL connection status
+    // Check SQL Server connection status
     let sqlStatus = 'disconnected';
     if (sqlPool) {
       try {
@@ -130,11 +166,24 @@ app.get('/api/health', async (req, res) => {
       }
     }
 
+    // Check MySQL connection status
+    let mysqlStatus = 'disconnected';
+    if (mysqlPool) {
+      try {
+        const conn = await mysqlPool.getConnection();
+        conn.release();
+        mysqlStatus = 'connected';
+      } catch (err) {
+        mysqlStatus = 'error';
+      }
+    }
+
     res.json({
       status: 'OK',
       database: 'Connected',
       totalProjects: count,
-      sqlServer: sqlStatus
+      sqlServer: sqlStatus,
+      mysql: mysqlStatus
     });
   } catch (error) {
     res.status(500).json({ status: 'ERROR', database: 'Disconnected', error: error.message });
@@ -143,6 +192,130 @@ app.get('/api/health', async (req, res) => {
 
 app.get('/', (req, res) => {
   res.json({ message: 'Simorgh Backend Server is running!' });
+});
+
+// ============================================
+// TPMS MySQL API - Project List (READ-ONLY)
+// Based on C# ViewProjectMains query
+// ============================================
+
+/**
+ * GET /api/tpms/projects - Get project list from TPMS MySQL database
+ * Returns: [{ value: IdprojectMain, text: Oenum + ProjectName }]
+ * Equivalent to C#: _tpmsContext.ViewProjectMains.Select(p => new SelectListItem { Value = p.IdprojectMain.ToString(), Text = p.Oenum + p.ProjectName })
+ */
+app.get('/api/tpms/projects', async (req, res) => {
+  console.log('📥 GET /api/tpms/projects - Request received');
+
+  try {
+    const pool = await connectToMySql();
+
+    // Query ViewProjectMains table (READ-ONLY)
+    // Matches C# query: Select(p => new SelectListItem { Value = p.IdprojectMain.ToString(), Text = p.Oenum + p.ProjectName })
+    const [rows] = await pool.execute(`
+      SELECT
+        IdprojectMain as value,
+        CONCAT(COALESCE(Oenum, ''), COALESCE(ProjectName, '')) as text
+      FROM ViewProjectMains
+      ORDER BY ProjectName
+    `);
+
+    console.log(`✅ Loaded ${rows.length} projects from TPMS`);
+
+    res.json({
+      success: true,
+      count: rows.length,
+      projects: rows
+    });
+
+  } catch (err) {
+    console.error("❌ Error in /api/tpms/projects:", err.message);
+    res.status(500).json({
+      success: false,
+      error: err.message,
+      projects: []
+    });
+  }
+});
+
+/**
+ * GET /api/tpms/scopes/:projectId - Get scopes for a project
+ * For future implementation when needed
+ */
+app.get('/api/tpms/scopes/:projectId', async (req, res) => {
+  console.log('📥 GET /api/tpms/scopes - Request received');
+
+  try {
+    const pool = await connectToMySql();
+    const { projectId } = req.params;
+
+    // Query for scopes based on project (READ-ONLY)
+    // Adjust table/column names based on your actual schema
+    const [rows] = await pool.execute(`
+      SELECT
+        IdScope as value,
+        ScopeName as text
+      FROM ViewScopes
+      WHERE IdprojectMain = ?
+      ORDER BY ScopeName
+    `, [projectId]);
+
+    console.log(`✅ Loaded ${rows.length} scopes for project ${projectId}`);
+
+    res.json({
+      success: true,
+      count: rows.length,
+      scopes: rows
+    });
+
+  } catch (err) {
+    console.error("❌ Error in /api/tpms/scopes:", err.message);
+    res.status(500).json({
+      success: false,
+      error: err.message,
+      scopes: []
+    });
+  }
+});
+
+/**
+ * GET /api/tpms/revisions/:scopeId - Get revisions for a scope
+ * For future implementation when needed
+ */
+app.get('/api/tpms/revisions/:scopeId', async (req, res) => {
+  console.log('📥 GET /api/tpms/revisions - Request received');
+
+  try {
+    const pool = await connectToMySql();
+    const { scopeId } = req.params;
+
+    // Query for revisions based on scope (READ-ONLY)
+    // Adjust table/column names based on your actual schema
+    const [rows] = await pool.execute(`
+      SELECT
+        IdRevision as value,
+        RevName as text
+      FROM ViewRevisions
+      WHERE IdScope = ?
+      ORDER BY RevName
+    `, [scopeId]);
+
+    console.log(`✅ Loaded ${rows.length} revisions for scope ${scopeId}`);
+
+    res.json({
+      success: true,
+      count: rows.length,
+      revisions: rows
+    });
+
+  } catch (err) {
+    console.error("❌ Error in /api/tpms/revisions:", err.message);
+    res.status(500).json({
+      success: false,
+      error: err.message,
+      revisions: []
+    });
+  }
 });
 
 // ============================================
@@ -692,11 +865,21 @@ async function startServer() {
     console.warn("⚠️ Initial SQL Server connection failed, will retry on first request");
   });
 
+  // Try to connect to MySQL on startup (non-blocking)
+  connectToMySql().catch(err => {
+    console.warn("⚠️ Initial MySQL connection failed, will retry on first request");
+  });
+
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
     console.log(`Health: http://localhost:${PORT}/api/health`);
-    console.log(`Parts API: http://localhost:${PORT}/api/parts`);
-    console.log(`Manufacturers API: http://localhost:${PORT}/api/manufacturers`);
+    console.log(`\n📊 EPLAN API (SQL Server):`);
+    console.log(`   Parts: http://localhost:${PORT}/api/parts`);
+    console.log(`   Manufacturers: http://localhost:${PORT}/api/manufacturers`);
+    console.log(`\n📋 TPMS API (MySQL):`);
+    console.log(`   Projects: http://localhost:${PORT}/api/tpms/projects`);
+    console.log(`   Scopes: http://localhost:${PORT}/api/tpms/scopes/:projectId`);
+    console.log(`   Revisions: http://localhost:${PORT}/api/tpms/revisions/:scopeId`);
   });
 }
 
