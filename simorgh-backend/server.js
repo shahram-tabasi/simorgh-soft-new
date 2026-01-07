@@ -150,6 +150,184 @@ app.get('/', (req, res) => {
 // Based on server-example.js (READ-ONLY queries only)
 // ============================================
 
+// Helper function to transform SQL field names to frontend PascalCase format
+function transformPartToFrontend(part) {
+  return {
+    PartNumber: part.partnr || '',
+    TypeNumber: part.typenr || '',
+    OrderNumber: part.ordernr || '',
+    Manufacturer: part.manufacturer || '',
+    Designation1: part.description1 || '',
+    Designation2: part.description2 || '',
+    Designation3: part.description3 || '',
+    ProductGroup: part.productgroup || '',
+    ProductSubgroup: part.productsubgroup || '',
+    Width: part.width,
+    Height: part.height,
+    Depth: part.depth,
+    Weight: part.weight,
+    MountingLocation: part.mountinglocation || '',
+    MountingSpace: part.mountingspace || '',
+    CertificateCE: part.certificate_CE,
+    CertificateUL: part.certificate_UL,
+    CertificateATEX: part.certificate_ATEX,
+    // Also keep original fields for compatibility
+    ...part
+  };
+}
+
+/**
+ * POST /api/eplan-parts - Fetch parts from EPLAN SQL (Frontend compatible endpoint)
+ * This endpoint matches what the frontend TemplateProperties.tsx expects
+ * Request body: { searchTerm?: string, manufacturer?: string }
+ * (READ-ONLY: SELECT queries only)
+ */
+app.post('/api/eplan-parts', async (req, res) => {
+  console.log('📥 POST /api/eplan-parts - Request received (frontend compatible)');
+
+  try {
+    const sqlDb = await connectToSqlServer();
+
+    const { searchTerm = '', manufacturer = '' } = req.body;
+    console.log('📊 Parameters:', { searchTerm, manufacturer });
+
+    // Build WHERE conditions (READ-ONLY: SELECT queries only)
+    let where = [];
+    let params = {};
+
+    // Search filter
+    if (searchTerm) {
+      const searchPattern = `%${searchTerm}%`;
+      where.push(`(
+        partnr LIKE @search OR
+        typenr LIKE @search OR
+        ordernr LIKE @search OR
+        description1 LIKE @search OR
+        description2 LIKE @search OR
+        description3 LIKE @search OR
+        manufacturer LIKE @search OR
+        productgroup LIKE @search
+      )`);
+      params.search = searchPattern;
+    }
+
+    // Manufacturer filter
+    if (manufacturer) {
+      where.push(`manufacturer = @man`);
+      params.man = manufacturer;
+    }
+
+    const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";
+
+    // Data query (READ-ONLY) - limit to 100 results for performance
+    const dataRequest = sqlDb.request();
+    Object.keys(params).forEach(key => {
+      dataRequest.input(key, sql.NVarChar, params[key]);
+    });
+
+    const dataQuery = `
+      SELECT TOP 100
+        partnr, typenr, ordernr, manufacturer,
+        description1, description2, description3,
+        productgroup, productsubgroup,
+        width, height, depth, weight,
+        mountinglocation, mountingspace,
+        certificate_CE, certificate_UL, certificate_ATEX
+      FROM tblPart
+      ${whereClause}
+      ORDER BY partnr
+    `;
+
+    const dataResult = await dataRequest.query(dataQuery);
+    console.log(`📦 Records received: ${dataResult.recordset.length}`);
+
+    // Transform to frontend format (PascalCase field names)
+    const transformedData = dataResult.recordset.map(transformPartToFrontend);
+
+    // Get manufacturers list (READ-ONLY)
+    const manRequest = sqlDb.request();
+    const manQuery = `
+      SELECT DISTINCT manufacturer
+      FROM tblPart
+      WHERE manufacturer IS NOT NULL AND manufacturer != ''
+      ORDER BY manufacturer
+    `;
+    const manResult = await manRequest.query(manQuery);
+    const manufacturers = manResult.recordset.map(r => r.manufacturer);
+
+    res.json({
+      success: true,
+      data: transformedData,
+      manufacturers: manufacturers,
+      total: transformedData.length
+    });
+
+  } catch (err) {
+    console.error("❌ Error in POST /api/eplan-parts:", err.message);
+    console.error(err.stack);
+    res.status(500).json({
+      success: false,
+      error: err.message,
+      data: [] // Return empty array so frontend can use fallback
+    });
+  }
+});
+
+/**
+ * POST /api/save-part-to-mongo - Save selected part to MongoDB
+ * This endpoint matches what the frontend TemplateProperties.tsx expects
+ * Request body: { partData, propertyName, templateId, timestamp }
+ */
+app.post('/api/save-part-to-mongo', async (req, res) => {
+  console.log('📥 POST /api/save-part-to-mongo - Request received');
+
+  try {
+    const { partData, propertyName, templateId, timestamp } = req.body;
+
+    if (!partData) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing partData in request body'
+      });
+    }
+
+    console.log(`📝 Saving part ${partData.PartNumber} for property ${propertyName}`);
+
+    // Save to MongoDB selected_parts collection
+    const selectedPartsCollection = db.collection('selected_parts');
+
+    // Delete previous part for this property/template combination (replace behavior)
+    await selectedPartsCollection.deleteOne({
+      templateId: templateId,
+      propertyName: propertyName
+    });
+
+    // Insert the new part
+    const partDocument = {
+      templateId: templateId,
+      propertyName: propertyName,
+      partData: partData,
+      selectedAt: timestamp || new Date().toISOString()
+    };
+
+    await selectedPartsCollection.insertOne(partDocument);
+    console.log('✅ Part saved to MongoDB');
+
+    res.json({
+      success: true,
+      message: 'Part saved successfully',
+      data: partDocument
+    });
+
+  } catch (err) {
+    console.error("❌ Error in POST /api/save-part-to-mongo:", err.message);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
+  }
+});
+
 /**
  * GET /api/parts - Fetch parts from EPLAN SQL database with filtering
  * Query params:
