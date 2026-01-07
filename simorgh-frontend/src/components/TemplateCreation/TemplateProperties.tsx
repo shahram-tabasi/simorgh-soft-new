@@ -47,6 +47,11 @@ const PartSelectionDialog: React.FC<PartSelectionDialogProps> = ({
   const [selectedPart, setSelectedPart] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // ============================================
+  // ADDED: Manufacturer filter state
+  // ============================================
+  const [manufacturers, setManufacturers] = useState<string[]>([]);
+  const [selectedManufacturer, setSelectedManufacturer] = useState('');
 
   useEffect(() => {
     if (isOpen) {
@@ -54,10 +59,17 @@ const PartSelectionDialog: React.FC<PartSelectionDialogProps> = ({
     }
   }, [isOpen]);
 
+  // ADDED: Fetch when manufacturer filter changes
+  useEffect(() => {
+    if (isOpen && selectedManufacturer !== '') {
+      fetchParts();
+    }
+  }, [selectedManufacturer]);
+
   const fetchParts = async () => {
     setLoading(true);
     setError(null);
-    
+
     try {
       const response = await fetch('http://localhost:3001/api/eplan-parts', {
         method: 'POST',
@@ -65,11 +77,9 @@ const PartSelectionDialog: React.FC<PartSelectionDialogProps> = ({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          server: '192.168.1.39',
-          user: 'user fanni',
-          password: '12345678',
-          database: 'Eplan_n2',
-          searchTerm: searchTerm || undefined
+          searchTerm: searchTerm || undefined,
+          // ADDED: Include manufacturer filter in request
+          manufacturer: selectedManufacturer || undefined
         })
       });
 
@@ -78,19 +88,23 @@ const PartSelectionDialog: React.FC<PartSelectionDialogProps> = ({
       }
 
       const result = await response.json();
-      
+
       if (result.success && result.data) {
         setParts(result.data);
+        // ADDED: Store manufacturers list from response
+        if (result.manufacturers && result.manufacturers.length > 0) {
+          setManufacturers(result.manufacturers);
+        }
         console.log(`✅ Loaded ${result.data.length} parts from SQL Server`);
       } else {
         throw new Error('Invalid response format from server');
       }
-      
+
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Connection error';
       setError(errorMsg);
       console.error('❌ SQL Server error:', err);
-      
+
       // Fallback sample data
       setParts([
         {
@@ -106,6 +120,8 @@ const PartSelectionDialog: React.FC<PartSelectionDialogProps> = ({
           ProductSubgroup: 'Undefined'
         }
       ]);
+      // ADDED: Fallback manufacturers
+      setManufacturers(['Iskra', 'Siemens', 'ABB', 'Schneider']);
     } finally {
       setLoading(false);
     }
@@ -177,9 +193,25 @@ const PartSelectionDialog: React.FC<PartSelectionDialogProps> = ({
           </button>
         </div>
 
-        {/* Search Bar */}
+        {/* Search Bar with Manufacturer Filter */}
         <div className="px-6 py-4 border-b bg-gray-50">
           <div className="flex gap-4">
+            {/* ============================================ */}
+            {/* ADDED: Manufacturer Filter Dropdown */}
+            {/* ============================================ */}
+            <div className="w-48">
+              <select
+                value={selectedManufacturer}
+                onChange={(e) => setSelectedManufacturer(e.target.value)}
+                className="w-full py-2 px-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                <option value="">All Manufacturers</option>
+                {manufacturers.map((man, idx) => (
+                  <option key={idx} value={man}>{man}</option>
+                ))}
+              </select>
+            </div>
+            {/* Search Input */}
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
@@ -201,6 +233,21 @@ const PartSelectionDialog: React.FC<PartSelectionDialogProps> = ({
               {loading ? 'Loading...' : 'Search'}
             </button>
           </div>
+          {/* ADDED: Show active filter indicator */}
+          {selectedManufacturer && (
+            <div className="mt-2 flex items-center gap-2">
+              <span className="text-sm text-gray-600">Filter:</span>
+              <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-sm flex items-center gap-1">
+                {selectedManufacturer}
+                <button
+                  onClick={() => setSelectedManufacturer('')}
+                  className="ml-1 text-blue-600 hover:text-blue-800"
+                >
+                  ✕
+                </button>
+              </span>
+            </div>
+          )}
           {error && (
             <div className="mt-2 text-red-600 text-sm bg-red-50 border border-red-200 rounded px-3 py-2">
               ⚠️ {error}
