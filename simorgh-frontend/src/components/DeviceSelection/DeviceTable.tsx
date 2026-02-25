@@ -19,8 +19,8 @@ interface ContextMenuState {
 
 // Properties panel for a single device row
 const DEVICE_PROPERTIES = [
-  'CB ORDER', 'CB. RATING (A)', 'CONTACTOR. ORDER', 'CONTACTOR. RATING (A)',
-  'OVER LOAD RELAY', 'OVER LOAD RATING(A)', 'EARTH FAULT', 'COREBALANCE CT',
+  'CB ORDER', 'CONTACTOR. ORDER',
+  'OVER LOAD RELAY', 'EARTH FAULT', 'COREBALANCE CT',
   'PROTECTION RELAY', 'CT RATING', 'AMMETER', 'AMMETER SELECTOR',
   'PT RATING', 'VOLTMETER', 'VOLTMETER SELECTOR'
 ];
@@ -79,51 +79,83 @@ const DevicePropertiesModal: React.FC<DevicePropertiesModalProps> = ({ device, o
             <table className="w-full border border-gray-200 rounded-lg overflow-hidden text-sm">
               <thead>
                 <tr className="bg-gray-50">
-                  <th className="px-4 py-2 text-left font-medium text-gray-600 border-b w-1/4">Property</th>
-                  <th className="px-4 py-2 text-left font-medium text-gray-600 border-b">Parts</th>
-                  <th className="px-4 py-2 text-left font-medium text-gray-600 border-b w-36">Action</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-600 border-b w-36">Property</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-600 border-b">Part</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-600 border-b w-40">RATING</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-600 border-b w-32">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {DEVICE_PROPERTIES.map((prop) => {
                   const propParts = getPartsForProperty(prop);
                   return (
-                    <tr key={prop} className="border-b hover:bg-gray-50">
-                      <td className="px-4 py-2 font-medium text-gray-700 align-top">{prop}</td>
-                      <td className="px-4 py-2 align-top">
-                        {propParts.length > 0 ? (
-                          <div className="space-y-1">
-                            {propParts.map((entry, i) => (
-                              <div key={i} className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded px-2 py-1">
+                    <React.Fragment key={prop}>
+                      {propParts.length === 0 ? (
+                        <tr className="border-b hover:bg-gray-50">
+                          <td className="px-4 py-2 font-medium text-gray-700">{prop}</td>
+                          <td className="px-4 py-2 text-gray-400 text-xs" colSpan={2}>No part assigned</td>
+                          <td className="px-4 py-2">
+                            <button
+                              onClick={() => openAddPart(prop)}
+                              className="px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 flex items-center gap-1"
+                            >
+                              <PlusIcon className="w-3 h-3" />
+                              Add Part
+                            </button>
+                          </td>
+                        </tr>
+                      ) : (
+                        propParts.map((entry, i) => (
+                          <tr key={i} className="border-b hover:bg-gray-50">
+                            {i === 0 && (
+                              <td className="px-4 py-2 font-medium text-gray-700 align-top" rowSpan={propParts.length + 1}>
+                                {prop}
+                              </td>
+                            )}
+                            {/* Part number + remove */}
+                            <td className="px-4 py-2 align-top">
+                              <div className="flex items-center gap-1 bg-blue-50 border border-blue-200 rounded px-2 py-1">
                                 <span className="text-xs font-medium text-blue-800 truncate flex-1">
                                   📦 {entry.part.PartNumber}
                                 </span>
                                 {entry.part.Manufacturer && (
-                                  <span className="text-xs text-gray-500">{entry.part.Manufacturer}</span>
+                                  <span className="text-xs text-gray-500 shrink-0">{entry.part.Manufacturer}</span>
                                 )}
-                                <button
-                                  onClick={() => removePart(prop, entry.part.PartNumber)}
-                                  className="text-red-400 hover:text-red-600 ml-1"
-                                >
+                                <button onClick={() => removePart(prop, entry.part.PartNumber)}
+                                  className="text-red-400 hover:text-red-600 shrink-0">
                                   <XIcon className="w-3 h-3" />
                                 </button>
                               </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="text-gray-400 text-xs">No part assigned</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2 align-top">
-                        <button
-                          onClick={() => openAddPart(prop)}
-                          className="px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 flex items-center gap-1"
-                        >
-                          <PlusIcon className="w-3 h-3" />
-                          Add Part
-                        </button>
-                      </td>
-                    </tr>
+                            </td>
+                            {/* RATING — Designation3 of the part */}
+                            <td className="px-4 py-2 align-top">
+                              <div className="bg-amber-50 border border-amber-200 rounded px-2 py-1 text-xs text-amber-900 min-h-[28px]">
+                                {entry.part.Designation3 || '—'}
+                              </div>
+                            </td>
+                            <td className="px-4 py-2 align-top">
+                              {i === propParts.length - 1 && (
+                                <button onClick={() => openAddPart(prop)}
+                                  className="px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 flex items-center gap-1">
+                                  <PlusIcon className="w-3 h-3" />
+                                  Add
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                      {propParts.length > 0 && (
+                        <tr className="border-b bg-gray-50">
+                          <td colSpan={3} className="px-4 py-1">
+                            <button onClick={() => openAddPart(prop)}
+                              className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1">
+                              <PlusIcon className="w-3 h-3" /> Add another part
+                            </button>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   );
                 })}
               </tbody>

@@ -98,6 +98,7 @@ export interface DeviceTableRow {
   ratingPower: string;
   flc: string;
   equipmentId: string;
+  selectedParts?: SelectedPartEntry[];
 }
 
 // ⭐ UPDATED: Equipment Type - Added properties and devices fields

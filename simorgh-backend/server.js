@@ -323,29 +323,36 @@ app.get('/api/tpms/revisions/:scopeId', async (req, res) => {
 // Based on server-example.js (READ-ONLY queries only)
 // ============================================
 
+// Helper to strip junk characters (e.g. ??_??@ encoding artefacts) from SQL text fields
+function cleanText(str) {
+  if (!str) return '';
+  return str
+    .replace(/\?\?_\?\?@/g, '')   // remove specific SQL encoding artefact pattern
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // remove control characters
+    .trim();
+}
+
 // Helper function to transform SQL field names to frontend PascalCase format
 function transformPartToFrontend(part) {
   return {
-    PartNumber: part.partnr || '',
-    TypeNumber: part.typenr || '',
-    OrderNumber: part.ordernr || '',
-    Manufacturer: part.manufacturer || '',
-    Designation1: part.description1 || '',
-    Designation2: part.description2 || '',
-    Designation3: part.description3 || '',
-    ProductGroup: part.productgroup || '',
-    ProductSubgroup: part.productsubgroup || '',
+    PartNumber: cleanText(part.partnr),
+    TypeNumber: cleanText(part.typenr),
+    OrderNumber: cleanText(part.ordernr),
+    Manufacturer: cleanText(part.manufacturer),
+    Designation1: cleanText(part.description1),
+    Designation2: cleanText(part.description2),
+    Designation3: cleanText(part.description3),
+    ProductGroup: cleanText(part.productgroup),
+    ProductSubgroup: cleanText(part.productsubgroup),
     Width: part.width,
     Height: part.height,
     Depth: part.depth,
     Weight: part.weight,
-    MountingLocation: part.mountinglocation || '',
-    MountingSpace: part.mountingspace || '',
+    MountingLocation: cleanText(part.mountinglocation),
+    MountingSpace: cleanText(part.mountingspace),
     CertificateCE: part.certificate_CE,
     CertificateUL: part.certificate_UL,
     CertificateATEX: part.certificate_ATEX,
-    // Also keep original fields for compatibility
-    ...part
   };
 }
 
