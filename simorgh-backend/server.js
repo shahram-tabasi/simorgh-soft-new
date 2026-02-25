@@ -352,8 +352,10 @@ function transformPartToFrontend(part) {
 /**
  * POST /api/eplan-parts - Fetch parts from EPLAN SQL (Frontend compatible endpoint)
  * This endpoint matches what the frontend TemplateProperties.tsx expects
- * Request body: { searchTerm?: string, manufacturer?: string }
+ * Request body: { searchTerm?: string, manufacturer?: string, page?: number, pageSize?: number }
  * (READ-ONLY: SELECT queries only)
+ * - page: Page number starting from 1 (default: 1)
+ * - pageSize: Number of records per page (default: 100, max: 500)
  */
 app.post('/api/eplan-parts', async (req, res) => {
   console.log('📥 POST /api/eplan-parts - Request received (frontend compatible)');
@@ -361,8 +363,12 @@ app.post('/api/eplan-parts', async (req, res) => {
   try {
     const sqlDb = await connectToSqlServer();
 
-    const { searchTerm = '', manufacturer = '' } = req.body;
-    console.log('📊 Parameters:', { searchTerm, manufacturer });
+    const { searchTerm = '', manufacturer = '', page = 1, pageSize = 100 } = req.body;
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const pageSizeNum = Math.min(500, Math.max(1, parseInt(pageSize) || 100));
+    const offset = (pageNum - 1) * pageSizeNum;
+
+    console.log('📊 Parameters:', { searchTerm, manufacturer, pageNum, pageSizeNum, offset });
 
     // Build WHERE conditions (READ-ONLY: SELECT queries only)
     let where = [];
@@ -392,14 +398,26 @@ app.post('/api/eplan-parts', async (req, res) => {
 
     const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
-    // Data query (READ-ONLY) - limit to 100 results for performance
+    // Count query to get total (READ-ONLY)
+    const countRequest = sqlDb.request();
+    Object.keys(params).forEach(key => {
+      countRequest.input(key, sql.NVarChar, params[key]);
+    });
+    const countQuery = `SELECT COUNT(*) AS total FROM tblPart ${whereClause}`;
+    const countResult = await countRequest.query(countQuery);
+    const total = countResult.recordset[0].total;
+    console.log(`📈 Total matching records: ${total}`);
+
+    // Data query with pagination (READ-ONLY) - uses OFFSET/FETCH for full access
     const dataRequest = sqlDb.request();
     Object.keys(params).forEach(key => {
       dataRequest.input(key, sql.NVarChar, params[key]);
     });
+    dataRequest.input('offset', sql.Int, offset);
+    dataRequest.input('pageSize', sql.Int, pageSizeNum);
 
     const dataQuery = `
-      SELECT TOP 100
+      SELECT
         partnr, typenr, ordernr, manufacturer,
         description1, description2, description3,
         productgroup, productsubgroup,
@@ -409,6 +427,7 @@ app.post('/api/eplan-parts', async (req, res) => {
       FROM tblPart
       ${whereClause}
       ORDER BY partnr
+      OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY
     `;
 
     const dataResult = await dataRequest.query(dataQuery);
@@ -417,22 +436,30 @@ app.post('/api/eplan-parts', async (req, res) => {
     // Transform to frontend format (PascalCase field names)
     const transformedData = dataResult.recordset.map(transformPartToFrontend);
 
-    // Get manufacturers list (READ-ONLY)
-    const manRequest = sqlDb.request();
-    const manQuery = `
-      SELECT DISTINCT manufacturer
-      FROM tblPart
-      WHERE manufacturer IS NOT NULL AND manufacturer != ''
-      ORDER BY manufacturer
-    `;
-    const manResult = await manRequest.query(manQuery);
-    const manufacturers = manResult.recordset.map(r => r.manufacturer);
+    // Get manufacturers list (READ-ONLY) - only on first page to save time
+    let manufacturers = [];
+    if (pageNum === 1) {
+      const manRequest = sqlDb.request();
+      const manQuery = `
+        SELECT DISTINCT manufacturer
+        FROM tblPart
+        WHERE manufacturer IS NOT NULL AND manufacturer != ''
+        ORDER BY manufacturer
+      `;
+      const manResult = await manRequest.query(manQuery);
+      manufacturers = manResult.recordset.map(r => r.manufacturer);
+    }
+
+    const totalPages = Math.ceil(total / pageSizeNum);
 
     res.json({
       success: true,
       data: transformedData,
       manufacturers: manufacturers,
-      total: transformedData.length
+      total: total,
+      page: pageNum,
+      pageSize: pageSizeNum,
+      totalPages: totalPages
     });
 
   } catch (err) {

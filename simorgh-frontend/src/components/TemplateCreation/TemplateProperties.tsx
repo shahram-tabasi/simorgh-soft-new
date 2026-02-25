@@ -1,7 +1,9 @@
 // src/components/TemplateCreation/TemplateProperties.tsx - FIXED SQL CONNECTION
 import React, { useEffect, useState } from 'react';
 import { useProject } from '../../context/ProjectContext';
-import { PlusIcon, TrashIcon, Search, RefreshCw } from 'lucide-react';
+import { PlusIcon, TrashIcon, Search, RefreshCw, ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
+
+const PAGE_SIZE = 100;
 
 interface TemplateItem {
   id: string;
@@ -31,10 +33,10 @@ interface PartSelectionDialogProps {
   onClose: () => void;
   onSelect: (part: any) => void;
   propertyName: string;
-  currentPart?: PartInfo | null; // 🔹 برای تعویض پارت
+  currentPart?: PartInfo | null;
 }
 
-// 🔹 دیالوگ انتخاب پارت از SQL Server - با قابلیت تعویض
+// دیالوگ انتخاب پارت از SQL Server - با صفحه‌بندی کامل
 const PartSelectionDialog: React.FC<PartSelectionDialogProps> = ({
   isOpen,
   onClose,
@@ -47,39 +49,44 @@ const PartSelectionDialog: React.FC<PartSelectionDialogProps> = ({
   const [selectedPart, setSelectedPart] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // ============================================
-  // ADDED: Manufacturer filter state
-  // ============================================
   const [manufacturers, setManufacturers] = useState<string[]>([]);
   const [selectedManufacturer, setSelectedManufacturer] = useState('');
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+
+  // Open: reset and load page 1
   useEffect(() => {
     if (isOpen) {
-      fetchParts();
+      setCurrentPage(1);
+      setSelectedPart(null);
+      fetchParts(1);
     }
   }, [isOpen]);
 
-  // ADDED: Fetch when manufacturer filter changes
+  // Reload when manufacturer changes (reset to page 1)
   useEffect(() => {
-    if (isOpen && selectedManufacturer !== '') {
-      fetchParts();
+    if (isOpen) {
+      setCurrentPage(1);
+      fetchParts(1);
     }
   }, [selectedManufacturer]);
 
-  const fetchParts = async () => {
+  const fetchParts = async (page: number = currentPage) => {
     setLoading(true);
     setError(null);
 
     try {
       const response = await fetch('http://localhost:3001/api/eplan-parts', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           searchTerm: searchTerm || undefined,
-          // ADDED: Include manufacturer filter in request
-          manufacturer: selectedManufacturer || undefined
+          manufacturer: selectedManufacturer || undefined,
+          page: page,
+          pageSize: PAGE_SIZE
         })
       });
 
@@ -91,11 +98,14 @@ const PartSelectionDialog: React.FC<PartSelectionDialogProps> = ({
 
       if (result.success && result.data) {
         setParts(result.data);
-        // ADDED: Store manufacturers list from response
+        setTotalCount(result.total || result.data.length);
+        setTotalPages(result.totalPages || 1);
+        setCurrentPage(result.page || page);
+
         if (result.manufacturers && result.manufacturers.length > 0) {
           setManufacturers(result.manufacturers);
         }
-        console.log(`✅ Loaded ${result.data.length} parts from SQL Server`);
+        console.log(`✅ Loaded page ${result.page}/${result.totalPages} — ${result.data.length} of ${result.total} parts`);
       } else {
         throw new Error('Invalid response format from server');
       }
@@ -120,46 +130,40 @@ const PartSelectionDialog: React.FC<PartSelectionDialogProps> = ({
           ProductSubgroup: 'Undefined'
         }
       ]);
-      // ADDED: Fallback manufacturers
       setManufacturers(['Iskra', 'Siemens', 'ABB', 'Schneider']);
+      setTotalCount(1);
+      setTotalPages(1);
     } finally {
       setLoading(false);
     }
   };
 
-  const filteredParts = parts.filter(part => {
-    if (!searchTerm) return true;
-    const search = searchTerm.toLowerCase();
-    return (
-      part.PartNumber?.toLowerCase().includes(search) ||
-      part.TypeNumber?.toLowerCase().includes(search) ||
-      part.Designation1?.toLowerCase().includes(search) ||
-      part.Description?.toLowerCase().includes(search) ||
-      part.Manufacturer?.toLowerCase().includes(search)
-    );
-  });
+  const handleSearch = () => {
+    setCurrentPage(1);
+    fetchParts(1);
+  };
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage < 1 || newPage > totalPages || loading) return;
+    setCurrentPage(newPage);
+    fetchParts(newPage);
+  };
 
   const handleOk = async () => {
     if (!selectedPart) return;
 
     try {
-      // 🔹 ذخیره در MongoDB
       const response = await fetch('http://localhost:3001/api/save-part-to-mongo', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           partData: selectedPart,
           propertyName: propertyName,
-          templateId: 'current-template', // باید از context بیاید
+          templateId: 'current-template',
           timestamp: new Date().toISOString()
         })
       });
-
-      if (response.ok) {
-        console.log('✅ Part saved to MongoDB');
-      }
+      if (response.ok) console.log('✅ Part saved to MongoDB');
     } catch (err) {
       console.error('❌ MongoDB save error:', err);
     }
@@ -169,6 +173,17 @@ const PartSelectionDialog: React.FC<PartSelectionDialogProps> = ({
   };
 
   if (!isOpen) return null;
+
+  // Page number buttons to display
+  const pageButtons = () => {
+    const buttons: number[] = [];
+    const maxButtons = 5;
+    let start = Math.max(1, currentPage - Math.floor(maxButtons / 2));
+    let end = Math.min(totalPages, start + maxButtons - 1);
+    if (end - start < maxButtons - 1) start = Math.max(1, end - maxButtons + 1);
+    for (let i = start; i <= end; i++) buttons.push(i);
+    return buttons;
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -185,20 +200,14 @@ const PartSelectionDialog: React.FC<PartSelectionDialogProps> = ({
               </p>
             )}
           </div>
-          <button
-            onClick={onClose}
-            className="text-white hover:bg-blue-700 rounded-full p-2"
-          >
+          <button onClick={onClose} className="text-white hover:bg-blue-700 rounded-full p-2">
             ✕
           </button>
         </div>
 
         {/* Search Bar with Manufacturer Filter */}
-        <div className="px-6 py-4 border-b bg-gray-50">
+        <div className="px-6 py-3 border-b bg-gray-50">
           <div className="flex gap-4">
-            {/* ============================================ */}
-            {/* ADDED: Manufacturer Filter Dropdown */}
-            {/* ============================================ */}
             <div className="w-48">
               <select
                 value={selectedManufacturer}
@@ -211,7 +220,6 @@ const PartSelectionDialog: React.FC<PartSelectionDialogProps> = ({
                 ))}
               </select>
             </div>
-            {/* Search Input */}
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
@@ -220,12 +228,12 @@ const PartSelectionDialog: React.FC<PartSelectionDialogProps> = ({
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && fetchParts()}
+                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
                 autoFocus
               />
             </div>
             <button
-              onClick={fetchParts}
+              onClick={handleSearch}
               disabled={loading}
               className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-400 flex items-center gap-2"
             >
@@ -233,83 +241,127 @@ const PartSelectionDialog: React.FC<PartSelectionDialogProps> = ({
               {loading ? 'Loading...' : 'Search'}
             </button>
           </div>
-          {/* ADDED: Show active filter indicator */}
-          {selectedManufacturer && (
-            <div className="mt-2 flex items-center gap-2">
-              <span className="text-sm text-gray-600">Filter:</span>
+          <div className="mt-2 flex items-center gap-3 flex-wrap">
+            {selectedManufacturer && (
               <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-sm flex items-center gap-1">
                 {selectedManufacturer}
-                <button
-                  onClick={() => setSelectedManufacturer('')}
-                  className="ml-1 text-blue-600 hover:text-blue-800"
-                >
-                  ✕
-                </button>
+                <button onClick={() => setSelectedManufacturer('')} className="ml-1 text-blue-600 hover:text-blue-800">✕</button>
               </span>
-            </div>
-          )}
-          {error && (
-            <div className="mt-2 text-red-600 text-sm bg-red-50 border border-red-200 rounded px-3 py-2">
-              ⚠️ {error}
-            </div>
-          )}
+            )}
+            {!loading && totalCount > 0 && (
+              <span className="text-sm text-gray-500">
+                Total: <strong>{totalCount.toLocaleString()}</strong> part(s) — Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong>
+              </span>
+            )}
+            {error && (
+              <span className="text-red-600 text-sm bg-red-50 border border-red-200 rounded px-3 py-1">
+                ⚠️ {error}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Content */}
         <div className="flex-1 flex overflow-hidden">
           {/* Parts List */}
-          <div className="w-1/2 border-r overflow-y-auto">
-            {loading ? (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                  <p className="text-gray-500">Loading parts from SQL Server...</p>
+          <div className="w-1/2 border-r flex flex-col">
+            <div className="flex-1 overflow-y-auto">
+              {loading ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                    <p className="text-gray-500">Loading parts from SQL Server...</p>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <div className="p-2">
-                <div className="mb-2 px-3 py-2 bg-gray-100 text-sm text-gray-600">
-                  {filteredParts.length} part(s) found
-                </div>
-                {filteredParts.map((part, index) => (
-                  <div
-                    key={index}
-                    className={`p-3 mb-2 border rounded cursor-pointer transition-colors ${
-                      selectedPart?.PartNumber === part.PartNumber
-                        ? 'bg-blue-100 border-blue-500 shadow-sm'
-                        : 'border-gray-200 hover:bg-blue-50 hover:border-blue-300'
-                    }`}
-                    onClick={() => setSelectedPart(part)}
-                  >
-                    <div className="flex items-start">
-                      <span className="text-red-600 mr-2 text-lg">📦</span>
-                      <div className="flex-1">
-                        <div className="font-medium text-sm text-gray-900">
-                          {part.PartNumber}
-                        </div>
-                        <div className="text-xs text-gray-600 mt-1">
-                          {part.Designation1}
-                        </div>
-                        <div className="flex gap-2 mt-2 text-xs text-gray-500">
-                          <span className="bg-gray-100 px-2 py-0.5 rounded">
-                            {part.Manufacturer}
-                          </span>
-                          {part.OrderNumber && (
-                            <span className="bg-gray-100 px-2 py-0.5 rounded">
-                              {part.OrderNumber}
-                            </span>
-                          )}
+              ) : (
+                <div className="p-2">
+                  {parts.map((part, index) => (
+                    <div
+                      key={index}
+                      className={`p-3 mb-2 border rounded cursor-pointer transition-colors ${
+                        selectedPart?.PartNumber === part.PartNumber
+                          ? 'bg-blue-100 border-blue-500 shadow-sm'
+                          : 'border-gray-200 hover:bg-blue-50 hover:border-blue-300'
+                      }`}
+                      onClick={() => setSelectedPart(part)}
+                    >
+                      <div className="flex items-start">
+                        <span className="text-red-600 mr-2 text-lg">📦</span>
+                        <div className="flex-1">
+                          <div className="font-medium text-sm text-gray-900">{part.PartNumber}</div>
+                          <div className="text-xs text-gray-600 mt-1">{part.Designation1}</div>
+                          <div className="flex gap-2 mt-2 text-xs text-gray-500">
+                            <span className="bg-gray-100 px-2 py-0.5 rounded">{part.Manufacturer}</span>
+                            {part.OrderNumber && (
+                              <span className="bg-gray-100 px-2 py-0.5 rounded">{part.OrderNumber}</span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
+                  ))}
+                  {parts.length === 0 && !loading && (
+                    <div className="text-center text-gray-500 mt-10">
+                      <p className="text-lg mb-2">🔍 No parts found</p>
+                      <p className="text-sm">Try a different search term</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Pagination Bar */}
+            {totalPages > 1 && (
+              <div className="border-t px-3 py-2 bg-gray-50 flex items-center justify-center gap-1 flex-wrap">
+                <button
+                  onClick={() => handlePageChange(1)}
+                  disabled={currentPage === 1 || loading}
+                  className="px-2 py-1 rounded text-xs border hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                  title="First page"
+                >
+                  «
+                </button>
+                <button
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1 || loading}
+                  className="p-1 rounded border hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeftIcon className="w-4 h-4" />
+                </button>
+
+                {pageButtons().map(p => (
+                  <button
+                    key={p}
+                    onClick={() => handlePageChange(p)}
+                    disabled={loading}
+                    className={`px-3 py-1 rounded text-xs border font-medium ${
+                      p === currentPage
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'hover:bg-gray-200'
+                    } disabled:cursor-not-allowed`}
+                  >
+                    {p}
+                  </button>
                 ))}
-                {filteredParts.length === 0 && !loading && (
-                  <div className="text-center text-gray-500 mt-10">
-                    <p className="text-lg mb-2">🔍 No parts found</p>
-                    <p className="text-sm">Try a different search term</p>
-                  </div>
-                )}
+
+                <button
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages || loading}
+                  className="p-1 rounded border hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <ChevronRightIcon className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => handlePageChange(totalPages)}
+                  disabled={currentPage === totalPages || loading}
+                  className="px-2 py-1 rounded text-xs border hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                  title="Last page"
+                >
+                  »
+                </button>
+                <span className="text-xs text-gray-500 ml-2">
+                  {((currentPage - 1) * PAGE_SIZE) + 1}–{Math.min(currentPage * PAGE_SIZE, totalCount)} / {totalCount.toLocaleString()}
+                </span>
               </div>
             )}
           </div>
@@ -318,9 +370,7 @@ const PartSelectionDialog: React.FC<PartSelectionDialogProps> = ({
           <div className="w-1/2 overflow-y-auto p-6 bg-gray-50">
             {selectedPart ? (
               <div>
-                <h3 className="text-lg font-semibold mb-4 text-blue-900">
-                  📋 Part Details
-                </h3>
+                <h3 className="text-lg font-semibold mb-4 text-blue-900">📋 Part Details</h3>
                 <div className="space-y-3">
                   <DetailRow label="Product group" value={selectedPart.ProductGroup} />
                   <DetailRow label="Product subgroup" value={selectedPart.ProductSubgroup} />
@@ -333,11 +383,7 @@ const PartSelectionDialog: React.FC<PartSelectionDialogProps> = ({
                   <DetailRow label="Manufacturer" value={selectedPart.Manufacturer} highlight />
                   <DetailRow label="Supplier" value={selectedPart.Supplier} />
                   <DetailRow label="Order number" value={selectedPart.OrderNumber} />
-                  <DetailRow 
-                    label="Description" 
-                    value={selectedPart.Description} 
-                    multiline 
-                  />
+                  <DetailRow label="Description" value={selectedPart.Description} multiline />
                 </div>
               </div>
             ) : (
