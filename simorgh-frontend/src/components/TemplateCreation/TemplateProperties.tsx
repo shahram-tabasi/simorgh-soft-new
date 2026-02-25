@@ -481,10 +481,10 @@ export const TemplateProperties: React.FC<TemplatePropertiesProps> = ({
   }, [template]);
 
   const lvProperties = [
-    'CB ORDER', 'CB. RATING (A)', 'CONTACTOR. ORDER', 'CONTACTOR. RATING (A)',
-    'OVER LOAD RELAY', 'OVER LAOD RATING(A)', 'EARTH FAULT', 'COREBALANCE CT',
-    'PROTECTION RELAY', 'CT RATING', 'AMMETER', 'AMMETER selector',
-    'PT RATING', 'VOLTMETER', 'VOLTMETER selector'
+    'CB ORDER', 'CONTACTOR. ORDER',
+    'OVER LOAD RELAY', 'EARTH FAULT', 'COREBALANCE CT',
+    'PROTECTION RELAY', 'AMMETER', 'AMMETER selector',
+    'VOLTMETER', 'VOLTMETER selector'
   ];
 
   const mvProperties = [
@@ -599,23 +599,26 @@ export const TemplateProperties: React.FC<TemplatePropertiesProps> = ({
         <table className="w-full">
           <thead>
             <tr className="bg-gray-50">
-              <th className="px-4 py-2 text-left text-sm font-medium text-gray-600 border-b w-1/4">
+              <th className="px-4 py-2 text-left text-sm font-medium text-gray-600 border-b w-36">
                 Property
               </th>
-              <th className="px-4 py-2 text-left text-sm font-medium text-gray-600 border-b w-1/4">
+              <th className="px-4 py-2 text-left text-sm font-medium text-gray-600 border-b">
                 Part
               </th>
-              <th className="px-4 py-2 text-left text-sm font-medium text-gray-600 border-b w-1/4">
+              <th className="px-4 py-2 text-left text-sm font-medium text-gray-600 border-b w-40">
+                RATING
+              </th>
+              <th className="px-4 py-2 text-left text-sm font-medium text-gray-600 border-b w-28">
                 Label
               </th>
-              <th className="px-4 py-2 text-left text-sm font-medium text-gray-600 border-b w-1/6">
-                Quantity
+              <th className="px-4 py-2 text-left text-sm font-medium text-gray-600 border-b w-20">
+                Qty
               </th>
-              <th className="px-4 py-2 text-left text-sm font-medium text-gray-600 border-b w-1/6">
+              <th className="px-4 py-2 text-left text-sm font-medium text-gray-600 border-b w-20">
                 Priority
               </th>
-              <th className="px-4 py-2 text-left text-sm font-medium text-gray-600 border-b w-16">
-                Actions
+              <th className="px-4 py-2 text-left text-sm font-medium text-gray-600 border-b w-12">
+                Del
               </th>
             </tr>
           </thead>
@@ -628,10 +631,10 @@ export const TemplateProperties: React.FC<TemplatePropertiesProps> = ({
                 <React.Fragment key={index}>
                   {parts.length === 0 ? (
                     <tr className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                      <td className="px-4 py-3 text-sm border-b font-medium">
+                      <td className="px-4 py-3 text-sm border-b font-medium text-gray-700">
                         {property}
                       </td>
-                      <td className="px-4 py-2 border-b" colSpan={5}>
+                      <td className="px-4 py-2 border-b" colSpan={6}>
                         <button
                           onClick={() => handleOpenPartDialog(property)}
                           className="flex items-center text-blue-600 hover:text-blue-800 text-sm"
@@ -649,12 +652,13 @@ export const TemplateProperties: React.FC<TemplatePropertiesProps> = ({
                       >
                         {partIndex === 0 && (
                           <td
-                            className="px-4 py-3 text-sm border-b font-medium"
+                            className="px-4 py-3 text-sm border-b font-medium text-gray-700 align-top"
                             rowSpan={parts.length + 1}
                           >
                             {property}
                           </td>
                         )}
+                        {/* Part number + replace button */}
                         <td className="px-4 py-2 border-b">
                           <div className="flex items-center gap-2">
                             <input
@@ -672,6 +676,16 @@ export const TemplateProperties: React.FC<TemplatePropertiesProps> = ({
                             </button>
                           </div>
                         </td>
+                        {/* RATING column — shows Designation3 of the selected part */}
+                        <td className="px-4 py-2 border-b">
+                          <input
+                            type="text"
+                            className="w-full border border-gray-200 rounded px-2 py-1 text-sm bg-amber-50 text-amber-900"
+                            value={part.fullData?.Designation3 || ''}
+                            readOnly
+                            title="Rating (Designation 3)"
+                          />
+                        </td>
                         <td className="px-4 py-2 border-b">
                           <input
                             type="text"
@@ -688,12 +702,7 @@ export const TemplateProperties: React.FC<TemplatePropertiesProps> = ({
                             className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
                             value={part.quantity}
                             onChange={(e) =>
-                              handleUpdatePart(
-                                property,
-                                partIndex,
-                                'quantity',
-                                parseInt(e.target.value) || 1
-                              )
+                              handleUpdatePart(property, partIndex, 'quantity', parseInt(e.target.value) || 1)
                             }
                             min="1"
                           />
@@ -704,12 +713,7 @@ export const TemplateProperties: React.FC<TemplatePropertiesProps> = ({
                             className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
                             value={part.priority}
                             onChange={(e) =>
-                              handleUpdatePart(
-                                property,
-                                partIndex,
-                                'priority',
-                                parseInt(e.target.value) || 1
-                              )
+                              handleUpdatePart(property, partIndex, 'priority', parseInt(e.target.value) || 1)
                             }
                             min="1"
                           />
@@ -727,7 +731,7 @@ export const TemplateProperties: React.FC<TemplatePropertiesProps> = ({
                   )}
                   {parts.length > 0 && (
                     <tr className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                      <td className="px-4 py-2 border-b" colSpan={5}>
+                      <td className="px-4 py-2 border-b" colSpan={6}>
                         <button
                           onClick={() => handleOpenPartDialog(property)}
                           className="flex items-center text-blue-600 hover:text-blue-800 text-sm"

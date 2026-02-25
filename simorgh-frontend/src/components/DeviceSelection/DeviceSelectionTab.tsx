@@ -42,10 +42,10 @@ interface TemplatePropertiesModalProps {
 
 const TemplatePropertiesModal: React.FC<TemplatePropertiesModalProps> = ({ template, onClose, onEdit }) => {
   const lvProperties = [
-    'CB ORDER', 'CB. RATING (A)', 'CONTACTOR. ORDER', 'CONTACTOR. RATING (A)',
-    'OVER LOAD RELAY', 'OVER LAOD RATING(A)', 'EARTH FAULT', 'COREBALANCE CT',
-    'PROTECTION RELAY', 'CT RATING', 'AMMETER', 'AMMETER selector',
-    'PT RATING', 'VOLTMETER', 'VOLTMETER selector'
+    'CB ORDER', 'CONTACTOR. ORDER',
+    'OVER LOAD RELAY', 'EARTH FAULT', 'COREBALANCE CT',
+    'PROTECTION RELAY', 'AMMETER', 'AMMETER selector',
+    'VOLTMETER', 'VOLTMETER selector'
   ];
   const mvProperties = [
     'BREAKER TYPE', 'NOMINAL CURRENT', 'SHORT CIRCUIT CURRENT',
@@ -111,33 +111,40 @@ const TemplatePropertiesModal: React.FC<TemplatePropertiesModalProps> = ({ templ
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50">
-                  <th className="px-4 py-2 text-left font-medium text-gray-600 border-b">Property</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-600 border-b w-36">Property</th>
                   <th className="px-4 py-2 text-left font-medium text-gray-600 border-b">Part Number</th>
-                  <th className="px-4 py-2 text-left font-medium text-gray-600 border-b">Label</th>
-                  <th className="px-4 py-2 text-left font-medium text-gray-600 border-b">Quantity</th>
-                  <th className="px-4 py-2 text-left font-medium text-gray-600 border-b">Priority</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-600 border-b w-40">RATING</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-600 border-b w-28">Label</th>
+                  <th className="px-4 py-2 text-center font-medium text-gray-600 border-b w-16">Qty</th>
+                  <th className="px-4 py-2 text-center font-medium text-gray-600 border-b w-16">Priority</th>
                 </tr>
               </thead>
               <tbody>
                 {propertiesToShow.map((propName, idx) => {
-                  const propValue = properties[propName];
+                  const propValue = properties[propName] as { parts: Array<{ partNumber: string; label: string; quantity: number; priority: number; fullData?: any }> } | undefined;
                   const parts = propValue?.parts || [];
                   if (parts.length === 0) {
                     return (
                       <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                         <td className="px-4 py-2 border-b font-medium text-gray-700">{propName}</td>
-                        <td className="px-4 py-2 border-b text-gray-400 italic" colSpan={4}>No part assigned</td>
+                        <td className="px-4 py-2 border-b text-gray-400 italic" colSpan={5}>No part assigned</td>
                       </tr>
                     );
                   }
                   return parts.map((part, pIdx) => (
                     <tr key={`${idx}-${pIdx}`} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                       {pIdx === 0 && (
-                        <td className="px-4 py-2 border-b font-medium text-gray-700" rowSpan={parts.length}>
+                        <td className="px-4 py-2 border-b font-medium text-gray-700 align-top" rowSpan={parts.length}>
                           {propName}
                         </td>
                       )}
                       <td className="px-4 py-2 border-b text-xs font-mono">{part.partNumber || '-'}</td>
+                      {/* RATING — shows Designation3 of the part */}
+                      <td className="px-4 py-2 border-b">
+                        <span className="bg-amber-50 text-amber-900 px-2 py-0.5 rounded text-xs">
+                          {part.fullData?.Designation3 || '—'}
+                        </span>
+                      </td>
                       <td className="px-4 py-2 border-b">{part.label || '-'}</td>
                       <td className="px-4 py-2 border-b text-center">{part.quantity}</td>
                       <td className="px-4 py-2 border-b text-center">{part.priority}</td>
