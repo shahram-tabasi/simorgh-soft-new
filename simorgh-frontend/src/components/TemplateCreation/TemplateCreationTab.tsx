@@ -5,16 +5,25 @@ import { TemplateProperties } from './TemplateProperties';
 
 interface TemplateCreationTabProps {
   onComplete: () => void;
+  initialSelectedTemplate?: string | null;
 }
 
 export const TemplateCreationTab: React.FC<TemplateCreationTabProps> = ({
-  onComplete
+  onComplete,
+  initialSelectedTemplate
 }) => {
   const {
     projectData
   } = useProject();
-  
-  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(initialSelectedTemplate ?? null);
+
+  // When initialSelectedTemplate changes (e.g. navigated from Device Selection), select that template
+  React.useEffect(() => {
+    if (initialSelectedTemplate) {
+      setSelectedTemplate(initialSelectedTemplate);
+    }
+  }, [initialSelectedTemplate]);
 
   // 🔹 بررسی امن برای projectData
   if (!projectData) {

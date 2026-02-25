@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { PlusIcon, UploadIcon, TrashIcon, CopyIcon, ArrowUpIcon, ArrowDownIcon, MaximizeIcon, MinimizeIcon, ChevronDownIcon, ChevronRightIcon, XIcon } from 'lucide-react';
-import { ProjectData, Equipment, DeviceTableRow } from '../../types/project';
+import * as XLSX from 'xlsx';
+import { PlusIcon, UploadIcon, TrashIcon, CopyIcon, ArrowUpIcon, ArrowDownIcon, MaximizeIcon, MinimizeIcon, ChevronDownIcon, ChevronRightIcon, XIcon, InfoIcon, EditIcon } from 'lucide-react';
+import { ProjectData, Equipment, DeviceTableRow, TemplateItem } from '../../types/project';
 
 // ===== PROPS INTERFACES =====
 interface DeviceTableProps {
@@ -29,42 +30,185 @@ interface DeviceSelectionTabProps {
   deleteEquipment: (id: string) => void;
   copyEquipment: (id: string) => void;
   onNext: () => void;
+  onNavigateToTemplate?: (templateId: string) => void;
 }
 
+// ===== TEMPLATE PROPERTIES MODAL =====
+interface TemplatePropertiesModalProps {
+  template: TemplateItem;
+  onClose: () => void;
+  onEdit: (templateId: string) => void;
+}
+
+const TemplatePropertiesModal: React.FC<TemplatePropertiesModalProps> = ({ template, onClose, onEdit }) => {
+  const lvProperties = [
+    'CB ORDER', 'CB. RATING (A)', 'CONTACTOR. ORDER', 'CONTACTOR. RATING (A)',
+    'OVER LOAD RELAY', 'OVER LAOD RATING(A)', 'EARTH FAULT', 'COREBALANCE CT',
+    'PROTECTION RELAY', 'CT RATING', 'AMMETER', 'AMMETER selector',
+    'PT RATING', 'VOLTMETER', 'VOLTMETER selector'
+  ];
+  const mvProperties = [
+    'BREAKER TYPE', 'NOMINAL CURRENT', 'SHORT CIRCUIT CURRENT',
+    'PROTECTION RELAY', 'CT RATIO', 'VT RATIO'
+  ];
+  const hvProperties = [
+    'BREAKER TYPE', 'NOMINAL VOLTAGE', 'NOMINAL CURRENT',
+    'SHORT CIRCUIT CURRENT', 'PROTECTION RELAY', 'INSULATION LEVEL'
+  ];
+
+  let propertiesToShow: string[] = [];
+  switch (template.type) {
+    case 'LV': propertiesToShow = lvProperties; break;
+    case 'MV': propertiesToShow = mvProperties; break;
+    case 'HV': propertiesToShow = hvProperties; break;
+  }
+
+  const properties = (template.properties as Record<string, { parts: Array<{ partNumber: string; label: string; quantity: number; priority: number }> }>) || {};
+
+  const getTypeColor = (type: 'LV' | 'MV' | 'HV') => {
+    switch (type) {
+      case 'LV': return 'bg-green-100 text-green-800';
+      case 'MV': return 'bg-orange-100 text-orange-800';
+      case 'HV': return 'bg-red-100 text-red-800';
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl w-[80%] max-h-[85%] flex flex-col">
+        {/* Header */}
+        <div className="bg-blue-600 text-white px-6 py-4 rounded-t-lg flex justify-between items-center">
+          <div>
+            <h2 className="text-xl font-semibold">Template Properties</h2>
+            <p className="text-sm text-blue-100 mt-1">{template.name}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className={`px-3 py-1 rounded-full text-sm font-semibold ${getTypeColor(template.type)}`}>
+              {template.type}
+            </span>
+            <button onClick={onClose} className="text-white hover:bg-blue-700 rounded-full p-1">
+              <XIcon className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="mb-4 grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded">
+            <div>
+              <span className="text-sm font-medium text-gray-600">Template Name:</span>
+              <span className="ml-2 text-sm font-semibold">{template.name}</span>
+            </div>
+            <div>
+              <span className="text-sm font-medium text-gray-600">Type:</span>
+              <span className={`ml-2 px-2 py-0.5 rounded text-xs font-semibold ${getTypeColor(template.type)}`}>
+                {template.type} ({template.type === 'LV' ? 'Low Voltage' : template.type === 'MV' ? 'Medium Voltage' : 'High Voltage'})
+              </span>
+            </div>
+          </div>
+
+          <div className="border border-gray-200 rounded overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th className="px-4 py-2 text-left font-medium text-gray-600 border-b">Property</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-600 border-b">Part Number</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-600 border-b">Label</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-600 border-b">Quantity</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-600 border-b">Priority</th>
+                </tr>
+              </thead>
+              <tbody>
+                {propertiesToShow.map((propName, idx) => {
+                  const propValue = properties[propName];
+                  const parts = propValue?.parts || [];
+                  if (parts.length === 0) {
+                    return (
+                      <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                        <td className="px-4 py-2 border-b font-medium text-gray-700">{propName}</td>
+                        <td className="px-4 py-2 border-b text-gray-400 italic" colSpan={4}>No part assigned</td>
+                      </tr>
+                    );
+                  }
+                  return parts.map((part, pIdx) => (
+                    <tr key={`${idx}-${pIdx}`} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                      {pIdx === 0 && (
+                        <td className="px-4 py-2 border-b font-medium text-gray-700" rowSpan={parts.length}>
+                          {propName}
+                        </td>
+                      )}
+                      <td className="px-4 py-2 border-b text-xs font-mono">{part.partNumber || '-'}</td>
+                      <td className="px-4 py-2 border-b">{part.label || '-'}</td>
+                      <td className="px-4 py-2 border-b text-center">{part.quantity}</td>
+                      <td className="px-4 py-2 border-b text-center">{part.priority}</td>
+                    </tr>
+                  ));
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t flex justify-between items-center bg-gray-50 rounded-b-lg">
+          <button
+            onClick={() => onEdit(template.id)}
+            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+          >
+            <EditIcon className="w-4 h-4 mr-2" />
+            Edit Template
+          </button>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50 text-sm"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ===== DEVICE TABLE COMPONENT =====
-const DeviceTable: React.FC<DeviceTableProps> = ({ 
-  selectedEquipment, 
-  updateEquipment, 
+const DeviceTable: React.FC<DeviceTableProps> = ({
+  selectedEquipment,
+  updateEquipment,
   projectData,
   isFullscreen,
   onToggleFullscreen
 }) => {
   const [rows, setRows] = useState<DeviceTableRow[]>([]);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
-  const [contextMenu, setContextMenu] = useState<{ 
-    visible: boolean; 
-    x: number; 
-    y: number; 
-    type: 'row' | 'cell' | null; 
-    cellRowId?: string 
+  const [contextMenu, setContextMenu] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    type: 'row' | 'cell' | null;
+    cellRowId?: string
   } | null>(null);
   const [moveToRow, setMoveToRow] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedCellRowId, setSelectedCellRowId] = useState<string | null>(null);
 
+  // Track previous equipment ID to only reload rows when equipment changes
+  const prevEquipmentIdRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (selectedEquipment) {
-      setRows(selectedEquipment.devices || []);
-    } else {
-      setRows([]);
+    // Only reload rows when the selected equipment ID changes (different equipment selected)
+    // NOT when the same equipment's data is updated (would cause infinite loop)
+    if (selectedEquipment?.id !== prevEquipmentIdRef.current) {
+      prevEquipmentIdRef.current = selectedEquipment?.id || null;
+      setRows(selectedEquipment?.devices || []);
+      setSelectedRows(new Set());
     }
   }, [selectedEquipment]);
 
   useEffect(() => {
-    if (selectedEquipment && rows.length > 0) {
+    if (selectedEquipment) {
       updateEquipment(selectedEquipment.id, { devices: rows });
     }
-  }, [rows, selectedEquipment, updateEquipment]);
+  }, [rows]);
 
   const handleRowClick = (id: string, e: React.MouseEvent) => {
     if (e.ctrlKey || e.metaKey) {
@@ -83,7 +227,7 @@ const DeviceTable: React.FC<DeviceTableProps> = ({
   const handleContextMenu = (e: React.MouseEvent, type: 'row' | 'cell', rowId?: string) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     if (type === 'row' && selectedRows.size > 0) {
       setContextMenu({ visible: true, x: e.clientX, y: e.clientY, type: 'row' });
     } else if (type === 'cell' && rowId) {
@@ -116,7 +260,7 @@ const DeviceTable: React.FC<DeviceTableProps> = ({
   const handleMoveRows = (direction: 'up' | 'down') => {
     const selectedIds = Array.from(selectedRows);
     const indices = selectedIds.map(id => rows.findIndex(r => r.id === id)).sort((a, b) => a - b);
-    
+
     if (direction === 'up' && indices[0] > 0) {
       const newRows = [...rows];
       indices.forEach(idx => {
@@ -143,14 +287,14 @@ const DeviceTable: React.FC<DeviceTableProps> = ({
     const selectedIds = Array.from(selectedRows);
     const selectedRowsData = rows.filter(r => selectedIds.includes(r.id));
     const otherRows = rows.filter(r => !selectedIds.includes(r.id));
-    
+
     const targetIndex = targetRowNum - 1;
     const newRows = [
       ...otherRows.slice(0, targetIndex),
       ...selectedRowsData,
       ...otherRows.slice(targetIndex)
     ];
-    
+
     reorderRows(newRows);
     handleCloseContextMenu();
   };
@@ -162,12 +306,12 @@ const DeviceTable: React.FC<DeviceTableProps> = ({
   const handleDrop = (e: React.DragEvent, rowId: string) => {
     e.preventDefault();
     const templateId = e.dataTransfer.getData('templateId');
-    
+
     if (!selectedEquipment) return;
-    
+
     let templateName = '';
     let templateType: 'LV' | 'MV' | 'HV' | null = null;
-    
+
     for (const type of ['LV', 'MV', 'HV'] as const) {
       const template = projectData.templates[type].find(t => t.id === templateId);
       if (template) {
@@ -176,23 +320,23 @@ const DeviceTable: React.FC<DeviceTableProps> = ({
         break;
       }
     }
-    
+
     if (templateType && templateType !== selectedEquipment.type) {
       alert(`Cannot add ${templateType} template to ${selectedEquipment.type} equipment!`);
       return;
     }
-    
-    setRows(rows.map(row => 
+
+    setRows(rows.map(row =>
       row.id === rowId ? { ...row, templateId, templateName } : row
     ));
   };
 
   const handleAddTemplateToCell = (templateId: string) => {
     if (!selectedCellRowId || !selectedEquipment) return;
-    
+
     let templateName = '';
     let templateType: 'LV' | 'MV' | 'HV' | null = null;
-    
+
     for (const type of ['LV', 'MV', 'HV'] as const) {
       const template = projectData.templates[type].find(t => t.id === templateId);
       if (template) {
@@ -201,16 +345,16 @@ const DeviceTable: React.FC<DeviceTableProps> = ({
         break;
       }
     }
-    
+
     if (templateType && templateType !== selectedEquipment.type) {
       alert(`Cannot add ${templateType} template to ${selectedEquipment.type} equipment!`);
       return;
     }
-    
-    setRows(rows.map(row => 
+
+    setRows(rows.map(row =>
       row.id === selectedCellRowId ? { ...row, templateId, templateName } : row
     ));
-    
+
     handleCloseContextMenu();
     setSelectedCellRowId(null);
   };
@@ -244,39 +388,76 @@ const DeviceTable: React.FC<DeviceTableProps> = ({
     fileInputRef.current?.click();
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    try {
-      const text = await file.text();
-      const lines = text.split('\n').filter(line => line.trim());
-      const dataRows = lines.slice(1);
-      
-      const importedRows: DeviceTableRow[] = dataRows
-        .filter(line => line.trim())
-        .map((line, index) => {
-          const cells = line.split(/[,\t]/).map(cell => cell.trim().replace(/^"|"$/g, ''));
-          
-          return {
-            id: `device-${Date.now()}-${index}`,
-            rowNumber: rows.length + index + 1,
-            templateId: '',
-            templateName: cells[0] || '',
-            busSection: cells[1] || '',
-            feederNo: cells[2] || '',
-            wiringType: cells[3] || '',
-            ratingPower: cells[4] || '',
-            flc: cells[5] || '',
-            equipmentId: selectedEquipment!.id
-          };
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = new Uint8Array(event.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+
+        // Convert to array of arrays (raw) to handle empty cells properly
+        const jsonData = XLSX.utils.sheet_to_json<Record<string, string>>(worksheet, {
+          defval: '',
+          raw: false
         });
 
-      setRows([...rows, ...importedRows]);
-      alert(`Successfully imported ${importedRows.length} rows!`);
-    } catch (error) {
-      alert('Error importing file. Expected format: Template, Bus Section, Feeder No, Wiring Type, Rating Power, FLC');
-    }
+        if (jsonData.length === 0) {
+          alert('No data found in the Excel file.');
+          return;
+        }
+
+        // Template column is NEVER imported - only via right-click or drag-and-drop
+        // Expected columns: Bus Section, Feeder No, Wiring Type, Rating Power, FLC (A)
+        const importedRows: DeviceTableRow[] = jsonData
+          .filter(row => {
+            // Skip rows where all relevant cells are empty
+            const busSection = (row['Bus Section'] || row['busSection'] || row['bus section'] || row['BUS SECTION'] || '').toString().trim();
+            const feederNo = (row['Feeder No'] || row['feederNo'] || row['feeder no'] || row['FEEDER NO'] || row['Feeder Number'] || '').toString().trim();
+            const wiringType = (row['Wiring Type'] || row['wiringType'] || row['wiring type'] || row['WIRING TYPE'] || '').toString().trim();
+            const ratingPower = (row['Rating Power'] || row['ratingPower'] || row['rating power'] || row['RATING POWER'] || row['Rating (kW)'] || '').toString().trim();
+            const flc = (row['FLC (A)'] || row['FLC'] || row['flc'] || row['Flc'] || row['FLC(A)'] || '').toString().trim();
+            return busSection || feederNo || wiringType || ratingPower || flc;
+          })
+          .map((row, index) => {
+            const busSection = (row['Bus Section'] || row['busSection'] || row['bus section'] || row['BUS SECTION'] || '').toString().trim();
+            const feederNo = (row['Feeder No'] || row['feederNo'] || row['feeder no'] || row['FEEDER NO'] || row['Feeder Number'] || '').toString().trim();
+            const wiringType = (row['Wiring Type'] || row['wiringType'] || row['wiring type'] || row['WIRING TYPE'] || '').toString().trim();
+            const ratingPower = (row['Rating Power'] || row['ratingPower'] || row['rating power'] || row['RATING POWER'] || row['Rating (kW)'] || '').toString().trim();
+            const flc = (row['FLC (A)'] || row['FLC'] || row['flc'] || row['Flc'] || row['FLC(A)'] || '').toString().trim();
+
+            return {
+              id: `device-${Date.now()}-${index}`,
+              rowNumber: rows.length + index + 1,
+              templateId: '',       // Template is NEVER imported from Excel
+              templateName: '',     // Must be assigned via right-click or drag-and-drop
+              busSection,
+              feederNo,
+              wiringType,
+              ratingPower,
+              flc,
+              equipmentId: selectedEquipment!.id
+            };
+          });
+
+        if (importedRows.length === 0) {
+          alert('No valid rows found. Make sure the Excel file has data in columns: Bus Section, Feeder No, Wiring Type, Rating Power, FLC (A)');
+          return;
+        }
+
+        setRows(prev => [...prev, ...importedRows]);
+        alert(`Successfully imported ${importedRows.length} row(s)!\n\nNote: Template column was not imported. Please assign templates via right-click on the Template cell or by drag-and-drop.`);
+      } catch (error) {
+        console.error('Import error:', error);
+        alert('Error importing file. Please make sure it is a valid Excel (.xlsx/.xls) or CSV file with columns: Bus Section, Feeder No, Wiring Type, Rating Power, FLC (A)');
+      }
+    };
+
+    reader.readAsArrayBuffer(file);
 
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -284,7 +465,7 @@ const DeviceTable: React.FC<DeviceTableProps> = ({
   };
 
   const updateRowField = (rowId: string, field: keyof DeviceTableRow, value: string) => {
-    setRows(rows.map(row => 
+    setRows(rows.map(row =>
       row.id === rowId ? { ...row, [field]: value } : row
     ));
   };
@@ -309,34 +490,35 @@ const DeviceTable: React.FC<DeviceTableProps> = ({
         style={{ display: 'none' }}
         onChange={handleFileUpload}
       />
-      
+
       <div className="mb-4 flex justify-between items-center">
         <div>
           <h3 className="font-semibold">Device Table: {selectedEquipment.name}</h3>
           <p className="text-xs text-gray-500">Type: <span className="font-semibold">{selectedEquipment.type}</span> | Power: {selectedEquipment.power || 'N/A'}</p>
         </div>
         <div className="flex space-x-2">
-          <button 
-            className="px-3 py-1 bg-purple-600 text-white rounded text-sm hover:bg-purple-700" 
+          <button
+            className="px-3 py-1 bg-purple-600 text-white rounded text-sm hover:bg-purple-700"
             onClick={onToggleFullscreen}
             title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
           >
             {isFullscreen ? <MinimizeIcon className="w-4 h-4 inline mr-1" /> : <MaximizeIcon className="w-4 h-4 inline mr-1" />}
             {isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
           </button>
-          <button 
-            className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700" 
+          <button
+            className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
             onClick={handleAddRow}
           >
             <PlusIcon className="w-4 h-4 inline mr-1" />
             Add Row
           </button>
-          <button 
-            className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700" 
+          <button
+            className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
             onClick={handleImportExcel}
+            title="Import from Excel (.xlsx, .xls, .csv). Template column will NOT be imported."
           >
             <UploadIcon className="w-4 h-4 inline mr-1" />
-            Import CSV
+            Import Excel
           </button>
         </div>
       </div>
@@ -364,9 +546,9 @@ const DeviceTable: React.FC<DeviceTableProps> = ({
                 <td className="px-4 py-2 border-b text-center font-medium bg-gray-50">
                   {row.rowNumber}
                 </td>
-                <td 
-                  className="px-4 py-2 border-b" 
-                  onDragOver={handleDragOver} 
+                <td
+                  className="px-4 py-2 border-b"
+                  onDragOver={handleDragOver}
                   onDrop={e => handleDrop(e, row.id)}
                   onContextMenu={(e) => handleContextMenu(e, 'cell', row.id)}
                 >
@@ -375,42 +557,42 @@ const DeviceTable: React.FC<DeviceTableProps> = ({
                   </div>
                 </td>
                 <td className="px-4 py-2 border-b">
-                  <input 
-                    type="text" 
-                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm" 
-                    value={row.busSection} 
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                    value={row.busSection}
                     onChange={e => updateRowField(row.id, 'busSection', e.target.value)}
                   />
                 </td>
                 <td className="px-4 py-2 border-b">
-                  <input 
-                    type="text" 
-                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm" 
-                    value={row.feederNo} 
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                    value={row.feederNo}
                     onChange={e => updateRowField(row.id, 'feederNo', e.target.value)}
                   />
                 </td>
                 <td className="px-4 py-2 border-b">
-                  <input 
-                    type="text" 
-                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm" 
-                    value={row.wiringType} 
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                    value={row.wiringType}
                     onChange={e => updateRowField(row.id, 'wiringType', e.target.value)}
                   />
                 </td>
                 <td className="px-4 py-2 border-b">
-                  <input 
-                    type="text" 
-                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm" 
-                    value={row.ratingPower} 
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                    value={row.ratingPower}
                     onChange={e => updateRowField(row.id, 'ratingPower', e.target.value)}
                   />
                 </td>
                 <td className="px-4 py-2 border-b">
-                  <input 
-                    type="text" 
-                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm" 
-                    value={row.flc} 
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                    value={row.flc}
                     onChange={e => updateRowField(row.id, 'flc', e.target.value)}
                   />
                 </td>
@@ -418,10 +600,10 @@ const DeviceTable: React.FC<DeviceTableProps> = ({
             ))}
           </tbody>
         </table>
-        
+
         {rows.length === 0 && (
           <div className="text-center py-8 text-gray-500 text-sm">
-            No devices. Click "Add Row" or "Import CSV".
+            No devices. Click "Add Row" or "Import Excel".
           </div>
         )}
       </div>
@@ -432,15 +614,15 @@ const DeviceTable: React.FC<DeviceTableProps> = ({
           style={{ top: contextMenu.y, left: contextMenu.x }}
           onClick={(e) => e.stopPropagation()}
         >
-          <button 
-            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100" 
+          <button
+            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
             onClick={() => handleMoveRows('up')}
           >
             <ArrowUpIcon className="w-4 h-4 inline mr-2" />
             Move Up
           </button>
-          <button 
-            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100" 
+          <button
+            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
             onClick={() => handleMoveRows('down')}
           >
             <ArrowDownIcon className="w-4 h-4 inline mr-2" />
@@ -465,8 +647,8 @@ const DeviceTable: React.FC<DeviceTableProps> = ({
             </button>
           </div>
           <div className="border-t my-1"></div>
-          <button 
-            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-600" 
+          <button
+            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-600"
             onClick={handleCloseContextMenu}
           >
             Cancel
@@ -499,8 +681,8 @@ const DeviceTable: React.FC<DeviceTableProps> = ({
             </div>
           )}
           <div className="border-t my-1"></div>
-          <button 
-            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-600" 
+          <button
+            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-600"
             onClick={handleCloseContextMenu}
           >
             Cancel
@@ -512,27 +694,27 @@ const DeviceTable: React.FC<DeviceTableProps> = ({
 };
 
 // ===== EQUIPMENT TREE COMPONENT =====
-const EquipmentTree: React.FC<EquipmentTreeProps> = ({ 
-  projectData, 
-  addEquipment, 
-  deleteEquipment, 
-  copyEquipment, 
-  selectedEquipment, 
-  setSelectedEquipment 
+const EquipmentTree: React.FC<EquipmentTreeProps> = ({
+  projectData,
+  addEquipment,
+  deleteEquipment,
+  copyEquipment,
+  selectedEquipment,
+  setSelectedEquipment
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newName, setNewName] = useState('');
   const [newType, setNewType] = useState<'LV' | 'MV' | 'HV'>('LV');
-  const [contextMenu, setContextMenu] = useState<{ 
-    visible: boolean; 
-    x: number; 
-    y: number; 
-    equipment: Equipment | null 
-  }>({ 
-    visible: false, 
-    x: 0, 
-    y: 0, 
-    equipment: null 
+  const [contextMenu, setContextMenu] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    equipment: Equipment | null
+  }>({
+    visible: false,
+    x: 0,
+    y: 0,
+    equipment: null
   });
   const [expandedEquipment, setExpandedEquipment] = useState<Set<string>>(new Set());
 
@@ -542,7 +724,7 @@ const EquipmentTree: React.FC<EquipmentTreeProps> = ({
         setContextMenu({ visible: false, x: 0, y: 0, equipment: null });
       }
     };
-    
+
     if (contextMenu.visible) {
       document.addEventListener('click', handleClickOutside);
       return () => document.removeEventListener('click', handleClickOutside);
@@ -607,7 +789,7 @@ const EquipmentTree: React.FC<EquipmentTreeProps> = ({
         {projectData.equipments.map(eq => {
           const isExpanded = expandedEquipment.has(eq.id);
           const hasDevices = eq.devices && eq.devices.length > 0;
-          
+
           return (
             <div key={eq.id} className="ml-4">
               <div
@@ -654,8 +836,8 @@ const EquipmentTree: React.FC<EquipmentTreeProps> = ({
               {isExpanded && hasDevices && (
                 <div className="ml-6 mt-1 space-y-1">
                   {eq.devices.map((device, idx) => (
-                    <div 
-                      key={device.id} 
+                    <div
+                      key={device.id}
                       className="p-2 bg-gray-50 border border-gray-200 rounded text-xs"
                     >
                       <div className="flex items-center justify-between">
@@ -688,8 +870,8 @@ const EquipmentTree: React.FC<EquipmentTreeProps> = ({
           style={{ top: contextMenu.y, left: contextMenu.x }}
           onClick={(e) => e.stopPropagation()}
         >
-          <button 
-            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100" 
+          <button
+            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
             onClick={() => {
               copyEquipment(contextMenu.equipment!.id);
               setContextMenu({ visible: false, x: 0, y: 0, equipment: null });
@@ -711,8 +893,8 @@ const EquipmentTree: React.FC<EquipmentTreeProps> = ({
             Delete
           </button>
           <div className="border-t my-1"></div>
-          <button 
-            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-600" 
+          <button
+            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-600"
             onClick={() => setContextMenu({ visible: false, x: 0, y: 0, equipment: null })}
           >
             <XIcon className="w-4 h-4 inline mr-2" />
@@ -751,8 +933,8 @@ const EquipmentTree: React.FC<EquipmentTreeProps> = ({
               </div>
             </div>
             <div className="flex justify-end space-x-2 mt-6">
-              <button 
-                className="px-4 py-2 border rounded text-sm" 
+              <button
+                className="px-4 py-2 border rounded text-sm"
                 onClick={() => {
                   setShowAddModal(false);
                   setNewName('');
@@ -761,8 +943,8 @@ const EquipmentTree: React.FC<EquipmentTreeProps> = ({
               >
                 Cancel
               </button>
-              <button 
-                className="px-4 py-2 bg-blue-600 text-white rounded text-sm" 
+              <button
+                className="px-4 py-2 bg-blue-600 text-white rounded text-sm"
                 onClick={handleCreate}
               >
                 Create
@@ -776,7 +958,7 @@ const EquipmentTree: React.FC<EquipmentTreeProps> = ({
 };
 
 // ===== DEVICE SELECTION TAB (MAIN COMPONENT) =====
-const DeviceSelectionTab: React.FC<DeviceSelectionTabProps> = ({ 
+const DeviceSelectionTab: React.FC<DeviceSelectionTabProps> = ({
   projectData,
   selectedEquipment,
   setSelectedEquipment,
@@ -784,13 +966,107 @@ const DeviceSelectionTab: React.FC<DeviceSelectionTabProps> = ({
   addEquipment,
   deleteEquipment,
   copyEquipment,
-  onNext 
+  onNext,
+  onNavigateToTemplate
 }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Template right-click context menu state (left panel)
+  const [templateContextMenu, setTemplateContextMenu] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    templateId: string | null;
+  }>({ visible: false, x: 0, y: 0, templateId: null });
+
+  // Template properties modal state
+  const [propertiesModal, setPropertiesModal] = useState<{
+    visible: boolean;
+    templateId: string | null;
+  }>({ visible: false, templateId: null });
+
+  // Derive current equipment from projectData (always up-to-date after updates)
+  const currentEquipment = selectedEquipment
+    ? (projectData.equipments.find(eq => eq.id === selectedEquipment.id) ?? null)
+    : null;
 
   const handleToggleFullscreen = () => {
     setIsFullscreen(!isFullscreen);
   };
+
+  // Close template context menu on outside click
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (templateContextMenu.visible) {
+        setTemplateContextMenu({ visible: false, x: 0, y: 0, templateId: null });
+      }
+    };
+    if (templateContextMenu.visible) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [templateContextMenu.visible]);
+
+  const handleTemplateContextMenu = (e: React.MouseEvent, templateId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setTemplateContextMenu({ visible: true, x: e.clientX, y: e.clientY, templateId });
+  };
+
+  const handleShowProperties = () => {
+    setPropertiesModal({ visible: true, templateId: templateContextMenu.templateId });
+    setTemplateContextMenu({ visible: false, x: 0, y: 0, templateId: null });
+  };
+
+  const handleEditTemplate = (templateId: string) => {
+    setPropertiesModal({ visible: false, templateId: null });
+    if (onNavigateToTemplate) {
+      onNavigateToTemplate(templateId);
+    }
+  };
+
+  // Find full template data for the properties modal
+  const getTemplateById = (templateId: string): TemplateItem | null => {
+    for (const type of ['LV', 'MV', 'HV'] as const) {
+      const found = projectData.templates[type].find(t => t.id === templateId);
+      if (found) return found;
+    }
+    return null;
+  };
+
+  const propertiesTemplate = propertiesModal.templateId
+    ? getTemplateById(propertiesModal.templateId)
+    : null;
+
+  // Left panel templates section with right-click support
+  const renderTemplateLeftPanel = () => (
+    <div className="border rounded">
+      <div className="bg-gray-50 px-4 py-2 border-b">
+        <h3 className="font-medium">Templates</h3>
+      </div>
+      <div className="p-2 max-h-96 overflow-y-auto">
+        {(['LV', 'MV', 'HV'] as const).map(type => (
+          <div key={type} className="mb-3">
+            <div className="text-xs font-semibold text-gray-600 mb-1">{type}</div>
+            {projectData.templates[type].length === 0 && (
+              <div className="text-xs text-gray-400 italic p-1">No templates</div>
+            )}
+            {projectData.templates[type].map(template => (
+              <div
+                key={template.id}
+                className="p-2 text-sm bg-white border rounded mb-1 cursor-move hover:bg-blue-50 select-none"
+                draggable
+                onDragStart={(e) => e.dataTransfer.setData('templateId', template.id)}
+                onContextMenu={(e) => handleTemplateContextMenu(e, template.id)}
+              >
+                {template.name}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   if (isFullscreen) {
     return (
@@ -806,15 +1082,48 @@ const DeviceSelectionTab: React.FC<DeviceSelectionTabProps> = ({
               Exit Fullscreen
             </button>
           </div>
-          
-          <DeviceTable 
-            selectedEquipment={selectedEquipment}
+
+          <DeviceTable
+            selectedEquipment={currentEquipment}
             updateEquipment={updateEquipment}
             projectData={projectData}
             isFullscreen={isFullscreen}
             onToggleFullscreen={handleToggleFullscreen}
           />
         </div>
+
+        {/* Template context menu (also in fullscreen) */}
+        {templateContextMenu.visible && (
+          <div
+            className="fixed z-50 w-48 bg-white border shadow-lg rounded py-1"
+            style={{ top: templateContextMenu.y, left: templateContextMenu.x }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center"
+              onClick={handleShowProperties}
+            >
+              <InfoIcon className="w-4 h-4 mr-2" />
+              Properties
+            </button>
+            <div className="border-t my-1"></div>
+            <button
+              className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-600"
+              onClick={() => setTemplateContextMenu({ visible: false, x: 0, y: 0, templateId: null })}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+
+        {/* Properties modal */}
+        {propertiesModal.visible && propertiesTemplate && (
+          <TemplatePropertiesModal
+            template={propertiesTemplate}
+            onClose={() => setPropertiesModal({ visible: false, templateId: null })}
+            onEdit={handleEditTemplate}
+          />
+        )}
       </div>
     );
   }
@@ -822,38 +1131,17 @@ const DeviceSelectionTab: React.FC<DeviceSelectionTabProps> = ({
   return (
     <div>
       <h2 className="text-xl font-semibold mb-4">Device Selection - {projectData.projectName}</h2>
-      
+
       <div className="grid grid-cols-4 gap-4">
-        <div className="border rounded">
-          <div className="bg-gray-50 px-4 py-2 border-b">
-            <h3 className="font-medium">Templates</h3>
-          </div>
-          <div className="p-2 max-h-96 overflow-y-auto">
-            {(['LV', 'MV', 'HV'] as const).map(type => (
-              <div key={type} className="mb-3">
-                <div className="text-xs font-semibold text-gray-600 mb-1">{type}</div>
-                {projectData.templates[type].map(template => (
-                  <div
-                    key={template.id}
-                    className="p-2 text-sm bg-white border rounded mb-1 cursor-move hover:bg-blue-50"
-                    draggable
-                    onDragStart={(e) => e.dataTransfer.setData('templateId', template.id)}
-                  >
-                    {template.name}
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
+        {renderTemplateLeftPanel()}
 
         <div className="col-span-2 border rounded">
           <div className="bg-gray-50 px-4 py-2 border-b">
             <h3 className="font-medium">Device Specifications</h3>
           </div>
           <div className="p-4">
-            <DeviceTable 
-              selectedEquipment={selectedEquipment}
+            <DeviceTable
+              selectedEquipment={currentEquipment}
               updateEquipment={updateEquipment}
               projectData={projectData}
               isFullscreen={isFullscreen}
@@ -866,7 +1154,7 @@ const DeviceSelectionTab: React.FC<DeviceSelectionTabProps> = ({
           <div className="bg-gray-50 px-4 py-2 border-b">
             <h3 className="font-medium">Equipment Tree</h3>
           </div>
-          <EquipmentTree 
+          <EquipmentTree
             projectData={projectData}
             addEquipment={addEquipment}
             deleteEquipment={deleteEquipment}
@@ -877,9 +1165,42 @@ const DeviceSelectionTab: React.FC<DeviceSelectionTabProps> = ({
         </div>
       </div>
 
+      {/* Template right-click context menu */}
+      {templateContextMenu.visible && (
+        <div
+          className="fixed z-50 w-48 bg-white border shadow-lg rounded py-1"
+          style={{ top: templateContextMenu.y, left: templateContextMenu.x }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center"
+            onClick={handleShowProperties}
+          >
+            <InfoIcon className="w-4 h-4 mr-2" />
+            Properties
+          </button>
+          <div className="border-t my-1"></div>
+          <button
+            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-600"
+            onClick={() => setTemplateContextMenu({ visible: false, x: 0, y: 0, templateId: null })}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {/* Template Properties Modal */}
+      {propertiesModal.visible && propertiesTemplate && (
+        <TemplatePropertiesModal
+          template={propertiesTemplate}
+          onClose={() => setPropertiesModal({ visible: false, templateId: null })}
+          onEdit={handleEditTemplate}
+        />
+      )}
+
       <div className="flex justify-end mt-6">
-        <button 
-          className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700" 
+        <button
+          className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
           onClick={onNext}
         >
           Next →
