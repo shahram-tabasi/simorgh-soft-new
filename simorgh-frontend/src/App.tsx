@@ -199,8 +199,9 @@ const MenuBar: React.FC<{ onShowProjectSelection: () => void }> = ({ onShowProje
 // کامپوننت اصلی اپ
 const MainApp: React.FC = () => {
   const [activeTab, setActiveTab] = useState(0);
-  const { 
-    projectData, 
+  const [navigatingToTemplateId, setNavigatingToTemplateId] = useState<string | null>(null);
+  const {
+    projectData,
     saveProject,
     selectedEquipment,
     setSelectedEquipment,
@@ -213,6 +214,12 @@ const MainApp: React.FC = () => {
   // Auto-save
   useAutoSave(projectData, saveProject);
 
+  // Navigate to Template Creation tab and select the given template
+  const handleNavigateToTemplate = (templateId: string) => {
+    setNavigatingToTemplateId(templateId);
+    setActiveTab(1);
+  };
+
   const tabs = [
     {
       id: 0,
@@ -222,7 +229,7 @@ const MainApp: React.FC = () => {
     {
       id: 1,
       title: `2. Create Template - ${projectData.projectName}`,
-      component: <TemplateCreationTab onComplete={() => setActiveTab(2)} />
+      component: <TemplateCreationTab onComplete={() => setActiveTab(2)} initialSelectedTemplate={navigatingToTemplateId} />
     },
     {
       id: 2,
@@ -237,6 +244,7 @@ const MainApp: React.FC = () => {
           deleteEquipment={deleteEquipment}
           copyEquipment={copyEquipment}
           onNext={() => setActiveTab(3)}
+          onNavigateToTemplate={handleNavigateToTemplate}
         />
       )
     },
