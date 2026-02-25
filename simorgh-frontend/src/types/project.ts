@@ -66,6 +66,12 @@ export interface DeviceItem {
   feederNo: string;
   busSection: string;
   isExpanded?: boolean;
+  selectedParts?: SelectedPartEntry[];
+}
+
+export interface SelectedPartEntry {
+  propertyName: string;
+  part: Record<string, any>;
 }
 
 export interface DeviceRow {
