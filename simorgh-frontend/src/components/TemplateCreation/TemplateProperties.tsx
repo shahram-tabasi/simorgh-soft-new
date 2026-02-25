@@ -483,8 +483,8 @@ export const TemplateProperties: React.FC<TemplatePropertiesProps> = ({
   const lvProperties = [
     'CB ORDER', 'CONTACTOR. ORDER',
     'OVER LOAD RELAY', 'EARTH FAULT', 'COREBALANCE CT',
-    'PROTECTION RELAY', 'AMMETER', 'AMMETER selector',
-    'VOLTMETER', 'VOLTMETER selector'
+    'PROTECTION RELAY', 'CT RATING', 'AMMETER', 'AMMETER selector',
+    'PT RATING', 'VOLTMETER', 'VOLTMETER selector'
   ];
 
   const mvProperties = [

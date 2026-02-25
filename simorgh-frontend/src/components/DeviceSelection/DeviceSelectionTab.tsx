@@ -1,7 +1,160 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
-import { PlusIcon, UploadIcon, TrashIcon, CopyIcon, ArrowUpIcon, ArrowDownIcon, MaximizeIcon, MinimizeIcon, ChevronDownIcon, ChevronRightIcon, XIcon, InfoIcon, EditIcon } from 'lucide-react';
-import { ProjectData, Equipment, DeviceTableRow, TemplateItem } from '../../types/project';
+import { PlusIcon, UploadIcon, TrashIcon, CopyIcon, ArrowUpIcon, ArrowDownIcon, MaximizeIcon, MinimizeIcon, ChevronDownIcon, ChevronRightIcon, XIcon, InfoIcon, EditIcon, Settings2Icon } from 'lucide-react';
+import { ProjectData, Equipment, DeviceTableRow, TemplateItem, SelectedPartEntry } from '../../types/project';
+import { PartSelectionDialog, SelectedPart } from '../shared/PartSelectionDialog';
+
+// ===== DEVICE ROW PROPERTIES MODAL =====
+const ROW_PROPERTIES = [
+  'CB ORDER', 'CONTACTOR. ORDER',
+  'OVER LOAD RELAY', 'EARTH FAULT', 'COREBALANCE CT',
+  'PROTECTION RELAY', 'CT RATING', 'AMMETER', 'AMMETER selector',
+  'PT RATING', 'VOLTMETER', 'VOLTMETER selector'
+];
+
+interface RowPropertiesModalProps {
+  row: DeviceTableRow;
+  onClose: () => void;
+  onUpdate: (parts: SelectedPartEntry[]) => void;
+}
+
+const RowPropertiesModal: React.FC<RowPropertiesModalProps> = ({ row, onClose, onUpdate }) => {
+  const [parts, setParts] = useState<SelectedPartEntry[]>(row.selectedParts || []);
+  const [partDialogOpen, setPartDialogOpen] = useState(false);
+  const [activeProperty, setActiveProperty] = useState('');
+
+  const getPartsForProp = (p: string) => parts.filter(e => e.propertyName === p);
+
+  const openAdd = (p: string) => { setActiveProperty(p); setPartDialogOpen(true); };
+
+  const handleSelected = (part: SelectedPart) => {
+    const updated = [...parts, { propertyName: activeProperty, part }];
+    setParts(updated);
+    onUpdate(updated);
+  };
+
+  const removePart = (propName: string, partNumber: string) => {
+    const updated = parts.filter(p => !(p.propertyName === propName && p.part.PartNumber === partNumber));
+    setParts(updated);
+    onUpdate(updated);
+  };
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40">
+        <div className="bg-white rounded-lg shadow-xl w-[80%] max-h-[85%] flex flex-col">
+          <div className="bg-blue-600 text-white px-6 py-4 rounded-t-lg flex justify-between items-center">
+            <div>
+              <h2 className="text-lg font-semibold">Row Properties</h2>
+              <p className="text-sm text-blue-100 mt-0.5">
+                Row {row.rowNumber}{row.templateName ? ` — ${row.templateName}` : ''}
+              </p>
+            </div>
+            <button onClick={onClose} className="text-white hover:bg-blue-700 rounded-full p-1">
+              <XIcon className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4">
+            <table className="w-full border border-gray-200 rounded-lg overflow-hidden text-sm">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th className="px-4 py-2 text-left font-medium text-gray-600 border-b w-36">Property</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-600 border-b">Part</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-600 border-b w-40">RATING</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-600 border-b w-28">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ROW_PROPERTIES.map((prop) => {
+                  const propParts = getPartsForProp(prop);
+                  return (
+                    <React.Fragment key={prop}>
+                      {propParts.length === 0 ? (
+                        <tr className="border-b hover:bg-gray-50">
+                          <td className="px-4 py-2 font-medium text-gray-700">{prop}</td>
+                          <td className="px-4 py-2 text-gray-400 text-xs" colSpan={2}>No part assigned</td>
+                          <td className="px-4 py-2">
+                            <button onClick={() => openAdd(prop)}
+                              className="px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 flex items-center gap-1">
+                              <PlusIcon className="w-3 h-3" /> Add Part
+                            </button>
+                          </td>
+                        </tr>
+                      ) : (
+                        propParts.map((entry, i) => (
+                          <tr key={i} className="border-b hover:bg-gray-50">
+                            {i === 0 && (
+                              <td className="px-4 py-2 font-medium text-gray-700 align-top" rowSpan={propParts.length + 1}>
+                                {prop}
+                              </td>
+                            )}
+                            <td className="px-4 py-2 align-top">
+                              <div className="flex items-center gap-1 bg-blue-50 border border-blue-200 rounded px-2 py-1">
+                                <span className="text-xs font-medium text-blue-800 truncate flex-1">
+                                  📦 {entry.part.PartNumber}
+                                </span>
+                                {entry.part.Manufacturer && (
+                                  <span className="text-xs text-gray-500 shrink-0">{entry.part.Manufacturer}</span>
+                                )}
+                                <button onClick={() => removePart(prop, entry.part.PartNumber)}
+                                  className="text-red-400 hover:text-red-600 shrink-0">
+                                  <XIcon className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </td>
+                            <td className="px-4 py-2 align-top">
+                              <div className="bg-amber-50 border border-amber-200 rounded px-2 py-1 text-xs text-amber-900 min-h-[28px]">
+                                {entry.part.Designation3 || '—'}
+                              </div>
+                            </td>
+                            <td className="px-4 py-2 align-top">
+                              {i === propParts.length - 1 && (
+                                <button onClick={() => openAdd(prop)}
+                                  className="px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 flex items-center gap-1">
+                                  <PlusIcon className="w-3 h-3" /> Add
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                      {propParts.length > 0 && (
+                        <tr className="border-b bg-gray-50">
+                          <td colSpan={3} className="px-4 py-1">
+                            <button onClick={() => openAdd(prop)}
+                              className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1">
+                              <PlusIcon className="w-3 h-3" /> Add another part
+                            </button>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="px-6 py-3 border-t bg-gray-50 flex justify-end">
+            <button onClick={onClose}
+              className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <PartSelectionDialog
+        isOpen={partDialogOpen}
+        onClose={() => setPartDialogOpen(false)}
+        onSelect={handleSelected}
+        title={`Select Part — ${activeProperty}`}
+        subtitle={row.templateName ? `Template: ${row.templateName}` : `Row ${row.rowNumber}`}
+      />
+    </>
+  );
+};
 
 // ===== PROPS INTERFACES =====
 interface DeviceTableProps {
@@ -44,8 +197,8 @@ const TemplatePropertiesModal: React.FC<TemplatePropertiesModalProps> = ({ templ
   const lvProperties = [
     'CB ORDER', 'CONTACTOR. ORDER',
     'OVER LOAD RELAY', 'EARTH FAULT', 'COREBALANCE CT',
-    'PROTECTION RELAY', 'AMMETER', 'AMMETER selector',
-    'VOLTMETER', 'VOLTMETER selector'
+    'PROTECTION RELAY', 'CT RATING', 'AMMETER', 'AMMETER selector',
+    'PT RATING', 'VOLTMETER', 'VOLTMETER selector'
   ];
   const mvProperties = [
     'BREAKER TYPE', 'NOMINAL CURRENT', 'SHORT CIRCUIT CURRENT',
@@ -197,6 +350,7 @@ const DeviceTable: React.FC<DeviceTableProps> = ({
   const [moveToRow, setMoveToRow] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedCellRowId, setSelectedCellRowId] = useState<string | null>(null);
+  const [propertiesRowId, setPropertiesRowId] = useState<string | null>(null);
 
   // Track previous equipment ID to only reload rows when equipment changes
   const prevEquipmentIdRef = useRef<string | null>(null);
@@ -559,8 +713,23 @@ const DeviceTable: React.FC<DeviceTableProps> = ({
                   onDrop={e => handleDrop(e, row.id)}
                   onContextMenu={(e) => handleContextMenu(e, 'cell', row.id)}
                 >
-                  <div className={`px-2 py-1 rounded text-sm ${!row.templateName ? 'bg-gray-100 border border-dashed text-gray-400' : 'bg-blue-50 border border-blue-200'}`}>
-                    {row.templateName || 'Drop here or right-click'}
+                  <div className="flex items-center gap-1">
+                    <div className={`flex-1 px-2 py-1 rounded text-sm ${!row.templateName ? 'bg-gray-100 border border-dashed text-gray-400' : 'bg-blue-50 border border-blue-200'}`}>
+                      {row.templateName || 'Drop here or right-click'}
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setPropertiesRowId(row.id); }}
+                      className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-50 border border-indigo-300 text-indigo-700 rounded hover:bg-indigo-100 text-xs shrink-0"
+                      title="Properties"
+                    >
+                      <Settings2Icon className="w-3.5 h-3.5" />
+                      Props
+                      {(row.selectedParts?.length ?? 0) > 0 && (
+                        <span className="bg-indigo-600 text-white rounded-full px-1.5 py-0.5 text-xs leading-none">
+                          {row.selectedParts!.length}
+                        </span>
+                      )}
+                    </button>
                   </div>
                 </td>
                 <td className="px-4 py-2 border-b">
@@ -663,12 +832,40 @@ const DeviceTable: React.FC<DeviceTableProps> = ({
         </div>
       )}
 
+      {/* Properties Modal for a row */}
+      {propertiesRowId && (() => {
+        const propertiesRow = rows.find(r => r.id === propertiesRowId);
+        if (!propertiesRow) return null;
+        return (
+          <RowPropertiesModal
+            row={propertiesRow}
+            onClose={() => setPropertiesRowId(null)}
+            onUpdate={(newParts) => {
+              setRows(rows.map(r => r.id === propertiesRowId ? { ...r, selectedParts: newParts } : r));
+              setPropertiesRowId(null);
+            }}
+          />
+        );
+      })()}
+
       {contextMenu?.visible && contextMenu.type === 'cell' && selectedEquipment && (
         <div
           className="fixed z-50 w-64 bg-white border shadow-lg rounded py-1 max-h-96 overflow-y-auto"
           style={{ top: contextMenu.y, left: contextMenu.x }}
           onClick={(e) => e.stopPropagation()}
         >
+          {/* Properties option at top */}
+          <button
+            className="w-full text-left px-4 py-2 text-sm hover:bg-indigo-50 text-indigo-700 font-medium flex items-center gap-2"
+            onClick={() => {
+              if (contextMenu.cellRowId) setPropertiesRowId(contextMenu.cellRowId);
+              handleCloseContextMenu();
+            }}
+          >
+            <Settings2Icon className="w-4 h-4" />
+            Properties
+          </button>
+          <div className="border-t my-1"></div>
           <div className="px-4 py-2 border-b bg-gray-50">
             <p className="text-xs font-semibold text-gray-600">Add Template ({selectedEquipment.type})</p>
           </div>
