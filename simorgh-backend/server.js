@@ -408,13 +408,14 @@ app.post('/api/eplan-parts', async (req, res) => {
     const total = countResult.recordset[0].total;
     console.log(`📈 Total matching records: ${total}`);
 
-    // Data query with pagination (READ-ONLY) - uses OFFSET/FETCH for full access
+    // Data query with pagination (READ-ONLY) - ROW_NUMBER() approach for SQL Server 2005+ compatibility
     const dataRequest = sqlDb.request();
     Object.keys(params).forEach(key => {
       dataRequest.input(key, sql.NVarChar, params[key]);
     });
-    dataRequest.input('offset', sql.Int, offset);
-    dataRequest.input('pageSize', sql.Int, pageSizeNum);
+
+    const rowStart = offset + 1;
+    const rowEnd = offset + pageSizeNum;
 
     const dataQuery = `
       SELECT
@@ -424,10 +425,14 @@ app.post('/api/eplan-parts', async (req, res) => {
         width, height, depth, weight,
         mountinglocation, mountingspace,
         certificate_CE, certificate_UL, certificate_ATEX
-      FROM tblPart
-      ${whereClause}
+      FROM (
+        SELECT *,
+          ROW_NUMBER() OVER (ORDER BY partnr) AS RowNum
+        FROM tblPart
+        ${whereClause}
+      ) AS NumberedRows
+      WHERE RowNum >= ${rowStart} AND RowNum <= ${rowEnd}
       ORDER BY partnr
-      OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY
     `;
 
     const dataResult = await dataRequest.query(dataQuery);
