@@ -52,28 +52,51 @@ const sqlConfig = {
     encrypt: false,
     trustServerCertificate: true,
     connectTimeout: 30000,
-    requestTimeout: 30000
+    requestTimeout: 60000   // افزایش به 60 ثانیه برای جداول بزرگ
   },
   pool: {
-    max: 10,
+    max: 5,
     min: 0,
-    idleTimeoutMillis: 30000
+    idleTimeoutMillis: 30000,
+    acquireTimeoutMillis: 30000
   }
 };
 
-let sqlPool;
+let sqlPool = null;
 
-// Connect to SQL Server (READ-ONLY)
+// Connect to SQL Server using ConnectionPool instance (NOT the global sql.connect)
+// Using ConnectionPool directly avoids the "Global connection already exists" error
+// when reconnecting after a failure.
 async function connectToSqlServer() {
+  // If pool exists and is connected, reuse it
+  if (sqlPool && sqlPool.connected) {
+    return sqlPool;
+  }
+
+  // Close any broken pool before reconnecting
+  if (sqlPool) {
+    try { await sqlPool.close(); } catch (_) {}
+    sqlPool = null;
+  }
+
   try {
-    if (!sqlPool) {
-      console.log("🔄 Connecting to SQL Server (EPLAN)...");
-      sqlPool = await sql.connect(sqlConfig);
-      console.log("✅ Connected to SQL Server (EPLAN) successfully!");
-    }
+    console.log("🔄 Connecting to SQL Server (EPLAN)...");
+    sqlPool = new sql.ConnectionPool(sqlConfig);
+
+    // Reset pool reference on any pool-level error so next request reconnects
+    sqlPool.on('error', (err) => {
+      console.error('❌ SQL Pool error (will reconnect on next request):', err.message);
+      sqlPool = null;
+    });
+
+    await sqlPool.connect();
+    console.log("✅ Connected to SQL Server (EPLAN) successfully!");
     return sqlPool;
   } catch (err) {
-    console.error("❌ SQL Server connection error:", err.message);
+    console.error("❌ SQL Server connection failed:", err.message);
+    if (sqlPool) {
+      try { await sqlPool.close(); } catch (_) {}
+    }
     sqlPool = null;
     throw err;
   }
@@ -113,6 +136,19 @@ async function connectToMySql() {
     throw err;
   }
 }
+
+// ============================================
+// SQL Health Check
+// ============================================
+app.get('/api/sql-health', async (req, res) => {
+  try {
+    const pool = await connectToSqlServer();
+    const result = await pool.request().query('SELECT 1 AS ok, @@VERSION AS version');
+    res.json({ connected: true, version: result.recordset[0].version });
+  } catch (err) {
+    res.status(500).json({ connected: false, error: err.message });
+  }
+});
 
 // ============================================
 // Existing Routes (unchanged)
