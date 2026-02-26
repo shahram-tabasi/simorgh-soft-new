@@ -405,17 +405,29 @@ app.post('/api/eplan-parts', async (req, res) => {
 
     const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
-    // Count query to get total (READ-ONLY)
-    const countRequest = sqlDb.request();
-    Object.keys(params).forEach(key => {
-      countRequest.input(key, sql.NVarChar, params[key]);
-    });
-    const countQuery = `SELECT COUNT(*) AS total FROM tblPart ${whereClause}`;
-    const countResult = await countRequest.query(countQuery);
-    const total = countResult.recordset[0].total;
-    console.log(`📈 Total matching records: ${total}`);
+    // Count query — use NOLOCK to avoid lock contention on large tables
+    // Wrapped in try-catch so a slow COUNT never breaks the data response
+    let total = 0;
+    let totalPages = 1;
+    try {
+      const countRequest = sqlDb.request();
+      Object.keys(params).forEach(key => {
+        countRequest.input(key, sql.NVarChar, params[key]);
+      });
+      const countResult = await countRequest.query(
+        `SELECT COUNT(*) AS total FROM tblPart WITH (NOLOCK) ${whereClause}`
+      );
+      total = countResult.recordset[0].total;
+      totalPages = Math.ceil(total / pageSizeNum) || 1;
+      console.log(`📈 Total matching records: ${total}`);
+    } catch (countErr) {
+      console.warn('⚠️ COUNT query skipped:', countErr.message);
+      total = -1; // unknown
+      totalPages = 999;
+    }
 
-    // Data query with pagination (READ-ONLY) - ROW_NUMBER() approach for SQL Server 2005+ compatibility
+    // Data query with pagination (READ-ONLY)
+    // ROW_NUMBER() with NOLOCK — works on SQL Server 2005+
     const dataRequest = sqlDb.request();
     Object.keys(params).forEach(key => {
       dataRequest.input(key, sql.NVarChar, params[key]);
@@ -435,7 +447,7 @@ app.post('/api/eplan-parts', async (req, res) => {
       FROM (
         SELECT *,
           ROW_NUMBER() OVER (ORDER BY partnr) AS RowNum
-        FROM tblPart
+        FROM tblPart WITH (NOLOCK)
         ${whereClause}
       ) AS NumberedRows
       WHERE RowNum >= ${rowStart} AND RowNum <= ${rowEnd}
@@ -461,8 +473,6 @@ app.post('/api/eplan-parts', async (req, res) => {
       const manResult = await manRequest.query(manQuery);
       manufacturers = manResult.recordset.map(r => r.manufacturer);
     }
-
-    const totalPages = Math.ceil(total / pageSizeNum);
 
     res.json({
       success: true,
