@@ -446,8 +446,8 @@ app.post('/api/eplan-parts', async (req, res) => {
       totalPages = 999;
     }
 
-    // Data query with pagination (READ-ONLY)
-    // ROW_NUMBER() with NOLOCK — works on SQL Server 2005+
+    // Data query with pagination — SELECT * to avoid "Invalid column name" errors
+    // on older SQL Server schemas that may not have all expected columns.
     const dataRequest = sqlDb.request();
     Object.keys(params).forEach(key => {
       dataRequest.input(key, sql.NVarChar, params[key]);
@@ -457,21 +457,13 @@ app.post('/api/eplan-parts', async (req, res) => {
     const rowEnd = offset + pageSizeNum;
 
     const dataQuery = `
-      SELECT
-        partnr, typenr, ordernr, manufacturer,
-        description1, description2, description3,
-        productgroup, productsubgroup,
-        width, height, depth, weight,
-        mountinglocation, mountingspace,
-        certificate_CE, certificate_UL, certificate_ATEX
+      SELECT *
       FROM (
-        SELECT *,
-          ROW_NUMBER() OVER (ORDER BY partnr) AS RowNum
+        SELECT *, ROW_NUMBER() OVER (ORDER BY partnr) AS RowNum
         FROM tblPart WITH (NOLOCK)
         ${whereClause}
       ) AS NumberedRows
       WHERE RowNum >= ${rowStart} AND RowNum <= ${rowEnd}
-      ORDER BY partnr
     `;
 
     const dataResult = await dataRequest.query(dataQuery);
