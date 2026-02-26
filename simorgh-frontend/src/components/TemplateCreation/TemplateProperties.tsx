@@ -90,11 +90,13 @@ const PartSelectionDialog: React.FC<PartSelectionDialogProps> = ({
         })
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: Failed to fetch parts`);
-      }
-
+      // Parse the body first so we can show the real SQL error message
       const result = await response.json();
+
+      if (!response.ok) {
+        // Show the actual error from the server (e.g. SQL connection message)
+        throw new Error(result.error || `HTTP ${response.status}`);
+      }
 
       if (result.success && result.data) {
         setParts(result.data);
@@ -107,32 +109,14 @@ const PartSelectionDialog: React.FC<PartSelectionDialogProps> = ({
         }
         console.log(`✅ Loaded page ${result.page}/${result.totalPages} — ${result.data.length} of ${result.total} parts`);
       } else {
-        throw new Error('Invalid response format from server');
+        throw new Error(result.error || 'Server returned an unsuccessful response');
       }
 
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Connection error';
       setError(errorMsg);
-      console.error('❌ SQL Server error:', err);
-
-      // Fallback sample data
-      setParts([
-        {
-          PartNumber: 'MCB/RI72J-C4(4A, DC, 6KA, 2Pole, Type C)',
-          TypeNumber: '101-MN26-AA401A04',
-          Designation1: 'Miniature Circuit Breaker(MCB)',
-          Designation2: '4A, DC, 10KA, 2Pole, Type C',
-          Designation3: 'DC, 2Pole #4A, Type C',
-          Manufacturer: 'Iskra',
-          OrderNumber: 'RI72J-C4',
-          Description: 'MCB, DC, 10KA, 2Pole, Type C, 4A',
-          ProductGroup: 'General',
-          ProductSubgroup: 'Undefined'
-        }
-      ]);
-      setManufacturers(['Iskra', 'Siemens', 'ABB', 'Schneider']);
-      setTotalCount(1);
-      setTotalPages(1);
+      setParts([]);
+      console.error('❌ SQL Server error:', errorMsg);
     } finally {
       setLoading(false);
     }
@@ -254,8 +238,14 @@ const PartSelectionDialog: React.FC<PartSelectionDialogProps> = ({
               </span>
             )}
             {error && (
-              <span className="text-red-600 text-sm bg-red-50 border border-red-200 rounded px-3 py-1">
+              <span className="flex items-center gap-2 text-red-600 text-sm bg-red-50 border border-red-200 rounded px-3 py-1">
                 ⚠️ {error}
+                <button
+                  onClick={() => fetchParts(1)}
+                  className="underline hover:no-underline font-medium shrink-0"
+                >
+                  Retry
+                </button>
               </span>
             )}
           </div>

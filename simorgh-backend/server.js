@@ -64,42 +64,26 @@ const sqlConfig = {
 
 let sqlPool = null;
 
-// Connect to SQL Server using ConnectionPool instance (NOT the global sql.connect)
-// Using ConnectionPool directly avoids the "Global connection already exists" error
-// when reconnecting after a failure.
 async function connectToSqlServer() {
-  // If pool exists and is connected, reuse it
-  if (sqlPool && sqlPool.connected) {
-    return sqlPool;
-  }
+  // Reuse existing pool if available
+  if (sqlPool) return sqlPool;
 
-  // Close any broken pool before reconnecting
-  if (sqlPool) {
-    try { await sqlPool.close(); } catch (_) {}
+  console.log("🔄 Connecting to SQL Server (EPLAN)...");
+  const pool = new sql.ConnectionPool(sqlConfig);
+
+  // On pool-level error, clear the reference so the next request reconnects
+  pool.on('error', (err) => {
+    console.error('❌ SQL Pool error:', err.message);
     sqlPool = null;
-  }
+  });
 
-  try {
-    console.log("🔄 Connecting to SQL Server (EPLAN)...");
-    sqlPool = new sql.ConnectionPool(sqlConfig);
-
-    // Reset pool reference on any pool-level error so next request reconnects
-    sqlPool.on('error', (err) => {
-      console.error('❌ SQL Pool error (will reconnect on next request):', err.message);
-      sqlPool = null;
-    });
-
-    await sqlPool.connect();
-    console.log("✅ Connected to SQL Server (EPLAN) successfully!");
-    return sqlPool;
-  } catch (err) {
-    console.error("❌ SQL Server connection failed:", err.message);
-    if (sqlPool) {
-      try { await sqlPool.close(); } catch (_) {}
-    }
-    sqlPool = null;
-    throw err;
-  }
+  // IMPORTANT: assign sqlPool ONLY after connect() succeeds.
+  // Assigning before connect() causes concurrent requests to see an
+  // unconnected pool and try to close/recreate it (race condition).
+  await pool.connect();
+  sqlPool = pool;
+  console.log("✅ Connected to SQL Server (EPLAN) successfully!");
+  return sqlPool;
 }
 
 // ============================================
@@ -527,11 +511,17 @@ app.post('/api/eplan-parts', async (req, res) => {
 
   } catch (err) {
     console.error("❌ Error in POST /api/eplan-parts:", err.message);
-    console.error(err.stack);
+    // Reset pool on connection errors so the next request triggers a fresh connect
+    if (err.code === 'ECONNRESET' || err.code === 'ETIMEOUT' ||
+        err.code === 'ENOTOPEN'   || err.code === 'ECONNREFUSED' ||
+        err.name === 'ConnectionError' || err.name === 'RequestError') {
+      console.warn('⚠️ Resetting SQL pool due to connection error, will reconnect on next request');
+      sqlPool = null;
+    }
     res.status(500).json({
       success: false,
       error: err.message,
-      data: [] // Return empty array so frontend can use fallback
+      data: []
     });
   }
 });
