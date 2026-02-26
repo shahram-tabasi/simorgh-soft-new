@@ -461,17 +461,22 @@ app.post('/api/eplan-parts', async (req, res) => {
     const transformedData = dataResult.recordset.map(transformPartToFrontend);
 
     // Get manufacturers list (READ-ONLY) - only on first page to save time
+    // Uses NOLOCK to avoid lock contention; wrapped in try-catch to prevent timeout breaking the response
     let manufacturers = [];
     if (pageNum === 1) {
-      const manRequest = sqlDb.request();
-      const manQuery = `
-        SELECT DISTINCT manufacturer
-        FROM tblPart
-        WHERE manufacturer IS NOT NULL AND manufacturer != ''
-        ORDER BY manufacturer
-      `;
-      const manResult = await manRequest.query(manQuery);
-      manufacturers = manResult.recordset.map(r => r.manufacturer);
+      try {
+        const manRequest = sqlDb.request();
+        const manQuery = `
+          SELECT DISTINCT manufacturer
+          FROM tblPart WITH (NOLOCK)
+          WHERE manufacturer IS NOT NULL AND manufacturer != ''
+          ORDER BY manufacturer
+        `;
+        const manResult = await manRequest.query(manQuery);
+        manufacturers = manResult.recordset.map(r => r.manufacturer);
+      } catch (manErr) {
+        console.warn('⚠️ Manufacturers query skipped:', manErr.message);
+      }
     }
 
     res.json({
