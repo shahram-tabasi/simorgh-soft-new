@@ -741,6 +741,10 @@ const EquipmentTree: React.FC<EquipmentTreeProps> = ({
     equipment: null
   });
   const [expandedEquipment, setExpandedEquipment] = useState<Set<string>>(new Set());
+  // key: `${equipmentId}::${templateName}`
+  const [expandedTemplates, setExpandedTemplates] = useState<Set<string>>(new Set());
+  // key: `${equipmentId}::${templateName}::${busSection}`
+  const [expandedBusSections, setExpandedBusSections] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const handleClickOutside = () => {
@@ -779,6 +783,18 @@ const EquipmentTree: React.FC<EquipmentTreeProps> = ({
       newExpanded.add(equipmentId);
     }
     setExpandedEquipment(newExpanded);
+  };
+
+  const toggleTemplate = (key: string) => {
+    const s = new Set(expandedTemplates);
+    s.has(key) ? s.delete(key) : s.add(key);
+    setExpandedTemplates(s);
+  };
+
+  const toggleBusSection = (key: string) => {
+    const s = new Set(expandedBusSections);
+    s.has(key) ? s.delete(key) : s.add(key);
+    setExpandedBusSections(s);
   };
 
   const getTypeColor = (type: 'LV' | 'MV' | 'HV') => {
@@ -856,27 +872,105 @@ const EquipmentTree: React.FC<EquipmentTreeProps> = ({
                 )}
               </div>
 
-              {/* نمایش دستگاه‌ها (devices) زیر Equipment */}
-              {isExpanded && hasDevices && (
-                <div className="ml-6 mt-1 space-y-1">
-                  {eq.devices.map((device, idx) => (
-                    <div
-                      key={device.id}
-                      className="p-2 bg-gray-50 border border-gray-200 rounded text-xs"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium text-gray-700">
-                          {idx + 1}. {device.templateName || 'No Template'}
-                        </span>
-                        <span className="text-gray-500">{device.flc ? `${device.flc}A` : ''}</span>
-                      </div>
-                      {device.busSection && (
-                        <div className="text-gray-500 mt-1">Bus: {device.busSection}</div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
+              {/* نمایش دستگاه‌ها – گروه‌بندی بر اساس تمپلیت → Bus Section → Feeder No */}
+              {isExpanded && hasDevices && (() => {
+                // ① Group by templateName
+                const templateMap = new Map<string, typeof eq.devices>();
+                for (const d of eq.devices) {
+                  const key = d.templateName || '(No Template)';
+                  if (!templateMap.has(key)) templateMap.set(key, []);
+                  templateMap.get(key)!.push(d);
+                }
+
+                return (
+                  <div className="ml-6 mt-1 space-y-1">
+                    {Array.from(templateMap.entries()).map(([tmplName, rows]) => {
+                      const tmplKey = `${eq.id}::${tmplName}`;
+                      const tmplExpanded = expandedTemplates.has(tmplKey);
+
+                      // ② Within this template group, group by busSection
+                      const busMap = new Map<string, string[]>();
+                      for (const d of rows) {
+                        const bus = d.busSection || '(No Bus Section)';
+                        if (!busMap.has(bus)) busMap.set(bus, []);
+                        if (d.feederNo) busMap.get(bus)!.push(d.feederNo);
+                      }
+
+                      return (
+                        <div key={tmplKey} className="border border-gray-200 rounded bg-white">
+                          {/* Template row – accordion header */}
+                          <button
+                            className="w-full flex items-center justify-between px-2 py-1.5 text-xs hover:bg-gray-50 rounded"
+                            onClick={() => toggleTemplate(tmplKey)}
+                          >
+                            <div className="flex items-center gap-1 font-medium text-gray-700 truncate">
+                              {tmplExpanded
+                                ? <ChevronDownIcon className="w-3 h-3 flex-shrink-0" />
+                                : <ChevronRightIcon className="w-3 h-3 flex-shrink-0" />}
+                              <span className="truncate">{tmplName}</span>
+                            </div>
+                            {rows.length > 1 && (
+                              <span className="ml-1 flex-shrink-0 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full text-[10px] font-semibold">
+                                ×{rows.length}
+                              </span>
+                            )}
+                          </button>
+
+                          {/* Accordion body – Bus Section → Feeder No */}
+                          {tmplExpanded && (
+                            <div className="border-t border-gray-100 px-2 pb-2 pt-1 space-y-1">
+                              {Array.from(busMap.entries()).map(([bus, feeders]) => {
+                                const busKey = `${tmplKey}::${bus}`;
+                                const busExpanded = expandedBusSections.has(busKey);
+                                // deduplicate feeders
+                                const uniqueFeeders = [...new Set(feeders)].sort();
+
+                                return (
+                                  <div key={busKey} className="rounded border border-gray-100 bg-gray-50">
+                                    <button
+                                      className="w-full flex items-center justify-between px-2 py-1 text-[11px] hover:bg-gray-100 rounded"
+                                      onClick={() => toggleBusSection(busKey)}
+                                    >
+                                      <div className="flex items-center gap-1 text-gray-600 font-medium">
+                                        {busExpanded
+                                          ? <ChevronDownIcon className="w-3 h-3 flex-shrink-0" />
+                                          : <ChevronRightIcon className="w-3 h-3 flex-shrink-0" />}
+                                        <span>🔌 {bus}</span>
+                                      </div>
+                                      <span className="text-gray-400 text-[10px]">
+                                        {uniqueFeeders.length} feeder{uniqueFeeders.length !== 1 ? 's' : ''}
+                                      </span>
+                                    </button>
+
+                                    {busExpanded && uniqueFeeders.length > 0 && (
+                                      <div className="pl-6 pr-2 pb-1 space-y-0.5">
+                                        {uniqueFeeders.map(fn => (
+                                          <div
+                                            key={fn}
+                                            className="flex items-center gap-1 text-[10px] text-gray-500 py-0.5"
+                                          >
+                                            <span className="text-gray-300">—</span>
+                                            <span>Feeder {fn}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {busExpanded && uniqueFeeders.length === 0 && (
+                                      <div className="pl-6 pr-2 pb-1 text-[10px] text-gray-400 italic">
+                                        No feeder assigned
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </div>
           );
         })}
