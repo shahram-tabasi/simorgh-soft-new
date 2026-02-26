@@ -1,7 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { PlusIcon, UploadIcon, MoveIcon, Trash2Icon, ChevronDownIcon, ChevronRightIcon, Settings2Icon, XIcon } from 'lucide-react';
+import { PlusIcon, UploadIcon, MoveIcon, Trash2Icon, ChevronDownIcon, ChevronRightIcon } from 'lucide-react';
 import { DeviceItem, DeviceRow } from '../../types/project';
-import { PartSelectionDialog, SelectedPart } from '../shared/PartSelectionDialog';
 import * as XLSX from 'xlsx';
 
 interface DeviceTableProps {
@@ -17,171 +16,6 @@ interface ContextMenuState {
   rowId: string | null;
 }
 
-// Properties panel for a single device row
-const DEVICE_PROPERTIES = [
-  'CB ORDER', 'CONTACTOR. ORDER',
-  'OVER LOAD RELAY', 'EARTH FAULT', 'COREBALANCE CT',
-  'PROTECTION RELAY', 'CT RATING', 'AMMETER', 'AMMETER SELECTOR',
-  'PT RATING', 'VOLTMETER', 'VOLTMETER SELECTOR'
-];
-
-interface DevicePropertiesModalProps {
-  device: DeviceItem;
-  onClose: () => void;
-  onUpdate: (parts: DeviceItem['selectedParts']) => void;
-}
-
-const DevicePropertiesModal: React.FC<DevicePropertiesModalProps> = ({ device, onClose, onUpdate }) => {
-  const [parts, setParts] = useState<NonNullable<DeviceItem['selectedParts']>>(
-    device.selectedParts || []
-  );
-  const [partDialogOpen, setPartDialogOpen] = useState(false);
-  const [activeProperty, setActiveProperty] = useState<string>('');
-
-  const getPartsForProperty = (propName: string) =>
-    parts.filter(p => p.propertyName === propName);
-
-  const openAddPart = (propName: string) => {
-    setActiveProperty(propName);
-    setPartDialogOpen(true);
-  };
-
-  const handlePartSelected = (part: SelectedPart) => {
-    const newEntry = { propertyName: activeProperty, part };
-    const updated = [...parts, newEntry];
-    setParts(updated);
-    onUpdate(updated);
-  };
-
-  const removePart = (propName: string, partNumber: string) => {
-    const updated = parts.filter(p => !(p.propertyName === propName && p.part.PartNumber === partNumber));
-    setParts(updated);
-    onUpdate(updated);
-  };
-
-  return (
-    <>
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40">
-        <div className="bg-white rounded-lg shadow-xl w-[80%] max-h-[85%] flex flex-col">
-          {/* Header */}
-          <div className="bg-blue-600 text-white px-6 py-4 rounded-t-lg flex justify-between items-center">
-            <div>
-              <h2 className="text-lg font-semibold">Device Properties</h2>
-              <p className="text-sm text-blue-100 mt-0.5">{device.deviceName}</p>
-            </div>
-            <button onClick={onClose} className="text-white hover:bg-blue-700 rounded-full p-1">
-              <XIcon className="w-5 h-5" />
-            </button>
-          </div>
-
-          {/* Table */}
-          <div className="flex-1 overflow-y-auto p-4">
-            <table className="w-full border border-gray-200 rounded-lg overflow-hidden text-sm">
-              <thead>
-                <tr className="bg-gray-50">
-                  <th className="px-4 py-2 text-left font-medium text-gray-600 border-b w-36">Property</th>
-                  <th className="px-4 py-2 text-left font-medium text-gray-600 border-b">Part</th>
-                  <th className="px-4 py-2 text-left font-medium text-gray-600 border-b w-40">RATING</th>
-                  <th className="px-4 py-2 text-left font-medium text-gray-600 border-b w-32">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {DEVICE_PROPERTIES.map((prop) => {
-                  const propParts = getPartsForProperty(prop);
-                  return (
-                    <React.Fragment key={prop}>
-                      {propParts.length === 0 ? (
-                        <tr className="border-b hover:bg-gray-50">
-                          <td className="px-4 py-2 font-medium text-gray-700">{prop}</td>
-                          <td className="px-4 py-2 text-gray-400 text-xs" colSpan={2}>No part assigned</td>
-                          <td className="px-4 py-2">
-                            <button
-                              onClick={() => openAddPart(prop)}
-                              className="px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 flex items-center gap-1"
-                            >
-                              <PlusIcon className="w-3 h-3" />
-                              Add Part
-                            </button>
-                          </td>
-                        </tr>
-                      ) : (
-                        propParts.map((entry, i) => (
-                          <tr key={i} className="border-b hover:bg-gray-50">
-                            {i === 0 && (
-                              <td className="px-4 py-2 font-medium text-gray-700 align-top" rowSpan={propParts.length + 1}>
-                                {prop}
-                              </td>
-                            )}
-                            {/* Part number + remove */}
-                            <td className="px-4 py-2 align-top">
-                              <div className="flex items-center gap-1 bg-blue-50 border border-blue-200 rounded px-2 py-1">
-                                <span className="text-xs font-medium text-blue-800 truncate flex-1">
-                                  📦 {entry.part.PartNumber}
-                                </span>
-                                {entry.part.Manufacturer && (
-                                  <span className="text-xs text-gray-500 shrink-0">{entry.part.Manufacturer}</span>
-                                )}
-                                <button onClick={() => removePart(prop, entry.part.PartNumber)}
-                                  className="text-red-400 hover:text-red-600 shrink-0">
-                                  <XIcon className="w-3 h-3" />
-                                </button>
-                              </div>
-                            </td>
-                            {/* RATING — Designation3 of the part */}
-                            <td className="px-4 py-2 align-top">
-                              <div className="bg-amber-50 border border-amber-200 rounded px-2 py-1 text-xs text-amber-900 min-h-[28px]">
-                                {entry.part.Designation3 || '—'}
-                              </div>
-                            </td>
-                            <td className="px-4 py-2 align-top">
-                              {i === propParts.length - 1 && (
-                                <button onClick={() => openAddPart(prop)}
-                                  className="px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 flex items-center gap-1">
-                                  <PlusIcon className="w-3 h-3" />
-                                  Add
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                      {propParts.length > 0 && (
-                        <tr className="border-b bg-gray-50">
-                          <td colSpan={3} className="px-4 py-1">
-                            <button onClick={() => openAddPart(prop)}
-                              className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1">
-                              <PlusIcon className="w-3 h-3" /> Add another part
-                            </button>
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="px-6 py-3 border-t bg-gray-50 flex justify-end">
-            <button onClick={onClose}
-              className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">
-              Close
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <PartSelectionDialog
-        isOpen={partDialogOpen}
-        onClose={() => setPartDialogOpen(false)}
-        onSelect={handlePartSelected}
-        title={`Select Part for: ${activeProperty}`}
-        subtitle={device.deviceName}
-      />
-    </>
-  );
-};
-
 export const DeviceTable: React.FC<DeviceTableProps> = ({ devices, onDevicesUpdate }) => {
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
@@ -189,7 +23,6 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({ devices, onDevicesUpda
   });
   const [moveToRowNumber, setMoveToRowNumber] = useState<string>('');
   const [showMoveDialog, setShowMoveDialog] = useState(false);
-  const [propertiesDevice, setPropertiesDevice] = useState<DeviceItem | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleMoveRows = () => {
@@ -361,7 +194,6 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({ devices, onDevicesUpda
               <th className="px-4 py-2 text-left text-sm font-medium text-gray-600 border-b">Wiring Type</th>
               <th className="px-4 py-2 text-left text-sm font-medium text-gray-600 border-b">Rating Power</th>
               <th className="px-4 py-2 text-left text-sm font-medium text-gray-600 border-b">FLC (A)</th>
-              <th className="px-4 py-2 text-center text-sm font-medium text-gray-600 border-b w-28">Properties</th>
             </tr>
           </thead>
           <tbody>
@@ -420,21 +252,6 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({ devices, onDevicesUpda
                       onChange={(e) => updateDeviceField(device.id, 'flc', e.target.value)}
                       onClick={(e) => e.stopPropagation()} />
                   </td>
-                  {/* Properties Column */}
-                  <td className="px-2 py-2 text-sm border-b text-center">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setPropertiesDevice(device); }}
-                      className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-50 border border-indigo-300 text-indigo-700 rounded hover:bg-indigo-100 text-xs"
-                    >
-                      <Settings2Icon className="w-3.5 h-3.5" />
-                      Props
-                      {(device.selectedParts?.length ?? 0) > 0 && (
-                        <span className="bg-indigo-600 text-white rounded-full px-1.5 py-0.5 text-xs leading-none">
-                          {device.selectedParts!.length}
-                        </span>
-                      )}
-                    </button>
-                  </td>
                 </tr>
 
                 {/* Sub-rows */}
@@ -467,14 +284,13 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({ devices, onDevicesUpda
                       <input type="text" className="w-full border border-gray-300 rounded px-2 py-1 text-sm bg-white"
                         value={row.flc} onChange={(e) => updateSubRowField(device.id, row.id, 'flc', e.target.value)} />
                     </td>
-                    <td className="px-2 py-2 text-sm border-b text-center text-gray-400">—</td>
                   </tr>
                 ))}
 
                 {/* Add sub-row button */}
                 {device.isExpanded && (
                   <tr>
-                    <td colSpan={9} className="px-4 py-2 border-b">
+                    <td colSpan={8} className="px-4 py-2 border-b">
                       <button className="text-sm text-blue-600 hover:text-blue-800 flex items-center pl-8" onClick={() => handleAddSubRow(device.id)}>
                         <PlusIcon className="w-4 h-4 mr-1" /> Add Sub-row
                       </button>
@@ -534,17 +350,6 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({ devices, onDevicesUpda
         <div className="fixed inset-0 z-40" onClick={() => setContextMenu({ ...contextMenu, visible: false })} />
       )}
 
-      {/* Device Properties Modal */}
-      {propertiesDevice && (
-        <DevicePropertiesModal
-          device={propertiesDevice}
-          onClose={() => setPropertiesDevice(null)}
-          onUpdate={(newParts) => {
-            updateDeviceField(propertiesDevice.id, 'selectedParts', newParts);
-            setPropertiesDevice({ ...propertiesDevice, selectedParts: newParts });
-          }}
-        />
-      )}
     </div>
   );
 };
