@@ -81,17 +81,19 @@ export const PartSelectionDialog: React.FC<PartSelectionDialogProps> = ({
         })
       });
 
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const result = await response.json();
 
-      if (result.success && result.data) {
-        setParts(result.data);
-        setTotalCount(result.total || result.data.length);
+      if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+
+      if (result.success) {
+        const data = Array.isArray(result.data) ? result.data : [];
+        setParts(data);
+        setTotalCount(result.total ?? data.length);
         setTotalPages(result.totalPages || 1);
         setCurrentPage(result.page || page);
         if (result.manufacturers?.length > 0) setManufacturers(result.manufacturers);
       } else {
-        throw new Error('Invalid response');
+        throw new Error(result.error || 'Server returned an unsuccessful response');
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Connection error';

@@ -345,8 +345,10 @@ app.get('/api/tpms/revisions/:scopeId', async (req, res) => {
 
 // Helper to strip junk characters (e.g. ??_??@ encoding artefacts) from SQL text fields
 function cleanText(str) {
-  if (!str) return '';
-  return str
+  if (str == null) return '';
+  // Some tblPart columns are numeric types in the schema; coerce to string before cleaning
+  const s = typeof str === 'string' ? str : String(str);
+  return s
     .replace(/\?\?_\?\?@/g, '')   // remove specific SQL encoding artefact pattern
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // remove control characters
     .trim();
@@ -468,6 +470,9 @@ app.post('/api/eplan-parts', async (req, res) => {
 
     const dataResult = await dataRequest.query(dataQuery);
     console.log(`📦 Records received: ${dataResult.recordset.length}`);
+    if (dataResult.recordset.length === 0) {
+      console.warn(`⚠️ 0 rows returned. Query: rowStart=${rowStart}, rowEnd=${rowEnd}, where="${whereClause}"`);
+    }
 
     // Transform to frontend format (PascalCase field names)
     const transformedData = dataResult.recordset.map(transformPartToFrontend);
