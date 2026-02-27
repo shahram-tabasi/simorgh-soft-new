@@ -12,12 +12,10 @@ export const ProjectSelection: React.FC<ProjectSelectionProps> = ({
   onProjectSelect,
   onNewProject,
 }) => {
-  const [projects,       setProjects]       = useState<ProjectData[]>([]);
-  const [searchTerm,     setSearchTerm]     = useState('');
-  const [loading,        setLoading]        = useState(true);
-  const [error,          setError]          = useState<string | null>(null);
-  const [showNameModal,  setShowNameModal]  = useState(false);
-  const [newProjectName, setNewProjectName] = useState('');
+  const [projects, setProjects] = useState<ProjectData[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadProjects();
@@ -30,31 +28,35 @@ export const ProjectSelection: React.FC<ProjectSelectionProps> = ({
       setProjects(projectsData);
     } catch (err) {
       setError('Failed to load projects');
-      console.error('Error loading projects:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const filteredProjects = projects.filter(project =>
-    project.projectName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    project.projectDescription.toLowerCase().includes(searchTerm.toLowerCase())
+  const trimmed = searchTerm.trim();
+
+  const filteredProjects = projects.filter(p =>
+    p.projectName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    p.projectDescription.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleProjectSelect = (project: ProjectData) => {
-    onProjectSelect(project);
-  };
+  // Exact name match (case-insensitive) — used for duplicate check
+  const exactMatch = projects.some(
+    p => p.projectName.toLowerCase() === trimmed.toLowerCase()
+  );
 
-  const handleCreateConfirm = () => {
-    const name = newProjectName.trim();
-    if (!name) return;
-    onNewProject(name);
+  // Show create button when user has typed something that doesn't fully match an existing project name
+  const canCreate = trimmed.length > 0 && !exactMatch;
+
+  const handleCreate = () => {
+    if (!canCreate) return;
+    onNewProject(trimmed);
   };
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100">
-        <div className="text-lg">Loading projects...</div>
+      <div className="flex items-center justify-center min-h-screen bg-gray-100">
+        <div className="text-gray-500 text-sm">Loading projects…</div>
       </div>
     );
   }
@@ -62,132 +64,110 @@ export const ProjectSelection: React.FC<ProjectSelectionProps> = ({
   return (
     <div className="flex flex-col min-h-screen bg-gray-100">
       {/* Header */}
-      <div className="bg-white shadow-md">
-        <div className="container mx-auto px-4">
-          <div className="flex items-center py-4">
-            <img
-              src={simorghLogo}
-              alt="Simorgh logo"
-              className="max-h-12 w-auto mr-3 object-contain"
-            />
-            <h1 className="text-2xl font-bold text-blue-800">
-              Simorgh Software - Project Selection
-            </h1>
+      <div className="bg-white border-b shadow-sm">
+        <div className="container mx-auto px-6 py-4 flex items-center gap-3">
+          <img src={simorghLogo} alt="Simorgh" className="h-10 w-auto object-contain" />
+          <div>
+            <h1 className="text-xl font-bold text-blue-900 leading-tight">Simorgh Design Software</h1>
+            <p className="text-xs text-gray-500">Electrical Engineering Design Platform</p>
           </div>
         </div>
       </div>
 
-      {/* New Project Name Modal */}
-      {showNameModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl p-6 w-96">
-            <h3 className="text-lg font-semibold mb-4">New Project</h3>
-            <label className="block text-sm mb-1 text-gray-600">Project Name:</label>
+      {/* Body */}
+      <div className="flex-1 container mx-auto px-6 py-8 max-w-3xl">
+
+        {error && (
+          <div className="mb-4 bg-red-50 border border-red-300 text-red-700 text-sm px-4 py-3 rounded">
+            {error}
+          </div>
+        )}
+
+        {/* Search / Create bar */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-5">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Search or create a project
+          </label>
+          <div className="flex gap-2">
             <input
               type="text"
               autoFocus
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm mb-4"
-              placeholder="Enter project name…"
-              value={newProjectName}
-              onChange={e => setNewProjectName(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleCreateConfirm(); }}
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-200"
+              placeholder="Type a project name…"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleCreate(); }}
             />
-            <div className="flex justify-end gap-2">
+            {canCreate && (
               <button
-                className="px-4 py-2 border rounded text-sm hover:bg-gray-100"
-                onClick={() => setShowNameModal(false)}
+                className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 whitespace-nowrap font-medium"
+                onClick={handleCreate}
               >
-                Cancel
+                + Create "{trimmed}"
               </button>
-              <button
-                className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50"
-                disabled={!newProjectName.trim()}
-                onClick={handleCreateConfirm}
-              >
-                Create
-              </button>
-            </div>
+            )}
+            {exactMatch && trimmed.length > 0 && (
+              <span className="self-center text-xs text-amber-600 whitespace-nowrap font-medium">
+                Name already exists
+              </span>
+            )}
           </div>
         </div>
-      )}
 
-      {/* Main Content */}
-      <div className="container mx-auto px-4 py-8 flex-1">
-        <div className="max-w-4xl mx-auto">
-          {/* Search and New Project */}
-          <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-            <div className="flex flex-col md:flex-row gap-4 md:items-center justify-between">
-              <div className="flex-1">
-                <input
-                  type="text"
-                  placeholder="Search projects by name or description..."
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-              <button
-                onClick={() => { setNewProjectName(''); setShowNameModal(true); }}
-                className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 whitespace-nowrap"
-              >
-                + Create New Project
-              </button>
-            </div>
+        {/* Projects list */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+          <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-gray-700">
+              {trimmed ? `Results for "${trimmed}"` : 'All Projects'}
+            </h2>
+            <span className="text-xs text-gray-400">{filteredProjects.length} project{filteredProjects.length !== 1 ? 's' : ''}</span>
           </div>
 
-          {/* Projects List */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-semibold mb-4">Select Project</h2>
-            
-            {error && (
-              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-                {error}
-              </div>
-            )}
-
-            {filteredProjects.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                {searchTerm ? 'No projects found matching your search.' : 'No projects found.'}
-                <br />
+          {filteredProjects.length === 0 ? (
+            <div className="py-12 text-center">
+              <p className="text-sm text-gray-500">
+                {trimmed
+                  ? <>No project named <strong>"{trimmed}"</strong>.</>
+                  : 'No projects yet.'}
+              </p>
+              {canCreate && (
                 <button
-                  onClick={() => { setNewProjectName(''); setShowNameModal(true); }}
-                  className="text-blue-600 hover:text-blue-800 mt-2"
+                  className="mt-3 text-sm text-blue-600 hover:text-blue-800 font-medium"
+                  onClick={handleCreate}
                 >
-                  Create a new project
+                  Create "{trimmed}" as a new project →
                 </button>
-              </div>
-            ) : (
-              <div className="grid gap-4">
-                {filteredProjects.map((project) => (
-                  <div
-                    key={project._id}
-                    className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer transition-colors"
-                    onClick={() => handleProjectSelect(project)}
-                  >
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="font-semibold text-lg text-blue-800">
-                          {project.projectName}
-                        </h3>
-                        <p className="text-gray-600 text-sm mt-1">
-                          {project.projectDescription}
-                        </p>
-                        <div className="flex gap-4 mt-2 text-xs text-gray-500">
-                          <span>Client: {project.client}</span>
-                          <span>Location: {project.location}</span>
-                          <span>Standard: {project.standard}</span>
-                        </div>
-                      </div>
-                      <div className="text-right text-xs text-gray-500">
-                        <div>Created: {project.createdOn}</div>
-                        <div>Modified: {project.changedOn}</div>
-                      </div>
+              )}
+            </div>
+          ) : (
+            <ul className="divide-y divide-gray-100">
+              {filteredProjects.map(project => (
+                <li
+                  key={project._id}
+                  className="flex items-center justify-between px-5 py-4 hover:bg-blue-50 cursor-pointer transition-colors group"
+                  onClick={() => onProjectSelect(project)}
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium text-blue-900 truncate">{project.projectName}</p>
+                    {project.projectDescription && (
+                      <p className="text-xs text-gray-500 mt-0.5 truncate">{project.projectDescription}</p>
+                    )}
+                    <div className="flex gap-3 mt-1 text-xs text-gray-400">
+                      {project.client   && <span>Client: {project.client}</span>}
+                      {project.location && <span>Location: {project.location}</span>}
+                      {project.standard && <span>{project.standard}</span>}
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
+                  <div className="ml-4 text-right text-xs text-gray-400 flex-shrink-0">
+                    <div>Modified: {new Date(project.changedOn).toLocaleDateString()}</div>
+                    <div className="mt-0.5 text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                      Open →
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
     </div>
