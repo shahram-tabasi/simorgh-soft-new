@@ -30,7 +30,7 @@ interface ShortcutsDialogProps {
   onClose: () => void;
 }
 
-const KeyboardShortcutsDialog: React.FC<ShortcutsDialogProps> = ({ onClose }) => {
+export const KeyboardShortcutsDialog: React.FC<ShortcutsDialogProps> = ({ onClose }) => {
   const [shortcuts, setShortcuts] = useState<Record<string, string>>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -226,7 +226,6 @@ export const TemplateCreationTab: React.FC<TemplateCreationTabProps> = ({
 }) => {
   const { projectData } = useProject();
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(initialSelectedTemplate ?? null);
-  const [showShortcuts, setShowShortcuts] = useState(false);
 
   React.useEffect(() => {
     if (initialSelectedTemplate) {
@@ -266,14 +265,6 @@ export const TemplateCreationTab: React.FC<TemplateCreationTabProps> = ({
       {/* Header */}
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-semibold">Create Template</h2>
-        <button
-          onClick={() => setShowShortcuts(true)}
-          className="px-3 py-1.5 bg-gray-100 border border-gray-300 rounded-md text-sm hover:bg-gray-200 flex items-center gap-2 text-gray-700 transition-colors"
-          title="Configure Keyboard Shortcuts"
-        >
-          <Keyboard className="w-4 h-4" />
-          Shortcuts
-        </button>
       </div>
 
       <div className="flex flex-grow border border-gray-200 rounded-md overflow-hidden">
@@ -304,7 +295,6 @@ export const TemplateCreationTab: React.FC<TemplateCreationTabProps> = ({
         </button>
       </div>
 
-      {showShortcuts && <KeyboardShortcutsDialog onClose={() => setShowShortcuts(false)} />}
     </div>
   );
 };
