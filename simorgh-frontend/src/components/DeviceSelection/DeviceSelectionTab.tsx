@@ -195,6 +195,8 @@ const DeviceTable: React.FC<DeviceTableProps> = ({
 }) => {
   const [rows, setRows] = useState<DeviceTableRow[]>([]);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+  const [lastSelectedIdx, setLastSelectedIdx] = useState<number>(-1);
+  const [filters, setFilters] = useState({ templateName: '', busSection: '', feederNo: '', wiringType: '', ratingPower: '', flc: '' });
   const [contextMenu, setContextMenu] = useState<{
     visible: boolean;
     x: number;
@@ -226,25 +228,46 @@ const DeviceTable: React.FC<DeviceTableProps> = ({
   }, [rows]);
 
   const handleRowClick = (id: string, e: React.MouseEvent) => {
-    if (e.ctrlKey || e.metaKey) {
+    const displayedRows = getFilteredRows();
+    const clickedIdx = displayedRows.findIndex(r => r.id === id);
+    if (e.shiftKey && lastSelectedIdx >= 0) {
+      const lo = Math.min(lastSelectedIdx, clickedIdx);
+      const hi = Math.max(lastSelectedIdx, clickedIdx);
+      const rangeIds = displayedRows.slice(lo, hi + 1).map(r => r.id);
+      setSelectedRows(prev => new Set([...prev, ...rangeIds]));
+    } else if (e.ctrlKey || e.metaKey) {
       const newSelected = new Set(selectedRows);
-      if (newSelected.has(id)) {
-        newSelected.delete(id);
-      } else {
-        newSelected.add(id);
-      }
+      if (newSelected.has(id)) { newSelected.delete(id); } else { newSelected.add(id); }
       setSelectedRows(newSelected);
+      setLastSelectedIdx(clickedIdx);
     } else {
       setSelectedRows(new Set([id]));
+      setLastSelectedIdx(clickedIdx);
     }
   };
+
+  // Returns rows filtered by column search inputs
+  const getFilteredRows = () => rows.filter(row =>
+    (!filters.templateName || row.templateName.toLowerCase().includes(filters.templateName.toLowerCase())) &&
+    (!filters.busSection  || row.busSection.toLowerCase().includes(filters.busSection.toLowerCase())) &&
+    (!filters.feederNo    || row.feederNo.toLowerCase().includes(filters.feederNo.toLowerCase())) &&
+    (!filters.wiringType  || row.wiringType.toLowerCase().includes(filters.wiringType.toLowerCase())) &&
+    (!filters.ratingPower || row.ratingPower.toLowerCase().includes(filters.ratingPower.toLowerCase())) &&
+    (!filters.flc         || row.flc.toLowerCase().includes(filters.flc.toLowerCase()))
+  );
 
   const handleContextMenu = (e: React.MouseEvent, type: 'row' | 'cell', rowId?: string) => {
     e.preventDefault();
     e.stopPropagation();
 
-    if (type === 'row' && selectedRows.size > 0) {
-      setContextMenu({ visible: true, x: e.clientX, y: e.clientY, type: 'row' });
+    if (type === 'row') {
+      // If right-clicking a specific row that isn't selected, select it first
+      if (rowId && !selectedRows.has(rowId)) {
+        setSelectedRows(new Set([rowId]));
+      }
+      if (selectedRows.size > 0 || rowId) {
+        setContextMenu({ visible: true, x: e.clientX, y: e.clientY, type: 'row' });
+      }
     } else if (type === 'cell' && rowId) {
       setSelectedCellRowId(rowId);
       setContextMenu({ visible: true, x: e.clientX, y: e.clientY, type: 'cell', cellRowId: rowId });
@@ -447,9 +470,9 @@ const DeviceTable: React.FC<DeviceTableProps> = ({
 
             return {
               id: `device-${Date.now()}-${index}`,
-              rowNumber: rows.length + index + 1,
-              templateId: '',       // Template is NEVER imported from Excel
-              templateName: '',     // Must be assigned via right-click or drag-and-drop
+              rowNumber: index + 1,   // always starts from 1
+              templateId: '',
+              templateName: '',
               busSection,
               feederNo,
               wiringType,
@@ -464,8 +487,9 @@ const DeviceTable: React.FC<DeviceTableProps> = ({
           return;
         }
 
-        setRows(prev => [...prev, ...importedRows]);
-        alert(`Successfully imported ${importedRows.length} row(s)!\n\nNote: Template column was not imported. Please assign templates via right-click on the Template cell or by drag-and-drop.`);
+        // Replace all rows with imported data (starting from row 1)
+        setRows(importedRows);
+        alert(`Imported ${importedRows.length} row(s) — existing rows replaced.\n\nAssign templates via right-click on the Template cell or drag-and-drop.`);
       } catch (error) {
         console.error('Import error:', error);
         alert('Error importing file. Please make sure it is a valid Excel (.xlsx/.xls) or CSV file with columns: Bus Section, Feeder No, Wiring Type, Rating Power, FLC (A)');
@@ -556,6 +580,14 @@ const DeviceTable: React.FC<DeviceTableProps> = ({
         </div>
       </div>
 
+      {/* Active filter indicator */}
+      {Object.values(filters).some(f => f) && (
+        <div className="mb-2 flex items-center gap-2 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-3 py-1.5">
+          <span>Filters active — showing {getFilteredRows().length} of {rows.length} rows</span>
+          <button className="ml-auto underline hover:no-underline" onClick={() => setFilters({ templateName: '', busSection: '', feederNo: '', wiringType: '', ratingPower: '', flc: '' })}>Clear all</button>
+        </div>
+      )}
+
       <div className="border border-gray-200 rounded overflow-hidden" onContextMenu={(e) => handleContextMenu(e, 'row')}>
         <table className="w-full text-sm">
           <thead>
@@ -568,13 +600,30 @@ const DeviceTable: React.FC<DeviceTableProps> = ({
               <th className="px-4 py-2 text-left font-medium text-gray-600 border-b">Rating Power</th>
               <th className="px-4 py-2 text-left font-medium text-gray-600 border-b">FLC (A)</th>
             </tr>
+            {/* Per-column filter row */}
+            <tr className="bg-white border-b border-gray-200">
+              <td className="px-2 py-1 w-12" />
+              {(['templateName', 'busSection', 'feederNo', 'wiringType', 'ratingPower', 'flc'] as const).map(col => (
+                <td key={col} className="px-2 py-1">
+                  <input
+                    type="text"
+                    placeholder="🔍"
+                    className="w-full border border-gray-200 rounded px-2 py-0.5 text-xs focus:outline-none focus:border-blue-400 bg-gray-50"
+                    value={filters[col]}
+                    onChange={e => setFilters(prev => ({ ...prev, [col]: e.target.value }))}
+                    onClick={e => e.stopPropagation()}
+                  />
+                </td>
+              ))}
+            </tr>
           </thead>
           <tbody>
-            {rows.map(row => (
+            {getFilteredRows().map(row => (
               <tr
                 key={row.id}
                 className={`cursor-pointer ${selectedRows.has(row.id) ? 'bg-blue-100' : 'hover:bg-gray-50'}`}
                 onClick={(e) => handleRowClick(row.id, e)}
+                onContextMenu={(e) => handleContextMenu(e, 'row', row.id)}
               >
                 <td className="px-4 py-2 border-b text-center font-medium bg-gray-50">
                   {row.rowNumber}
@@ -639,63 +688,77 @@ const DeviceTable: React.FC<DeviceTableProps> = ({
             No devices. Click "Add Row" or "Import Excel".
           </div>
         )}
+        {rows.length > 0 && getFilteredRows().length === 0 && (
+          <div className="text-center py-6 text-gray-400 text-sm">
+            No rows match the current filters.
+          </div>
+        )}
       </div>
 
-      {contextMenu?.visible && contextMenu.type === 'row' && (
+      {contextMenu?.visible && contextMenu.type === 'row' && selectedEquipment && (
         <div
-          className="fixed z-50 w-64 bg-white border shadow-lg rounded py-1"
+          className="fixed z-50 w-72 bg-white border shadow-lg rounded py-1 max-h-[80vh] overflow-y-auto"
           style={{ top: contextMenu.y, left: contextMenu.x }}
           onClick={(e) => e.stopPropagation()}
         >
+          <div className="px-4 py-1.5 bg-gray-50 border-b text-xs font-semibold text-gray-500">
+            {selectedRows.size} row{selectedRows.size !== 1 ? 's' : ''} selected
+          </div>
+
+          {/* Assign template to all selected rows */}
+          {projectData.templates[selectedEquipment.type]?.length > 0 && (
+            <>
+              <div className="px-4 py-2 border-b bg-blue-50">
+                <p className="text-xs font-semibold text-blue-700">Assign Template to All Selected</p>
+              </div>
+              {projectData.templates[selectedEquipment.type].map(tmpl => (
+                <button
+                  key={tmpl.id}
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-blue-50 flex items-center gap-2"
+                  onClick={() => {
+                    setRows(prev => prev.map(r =>
+                      selectedRows.has(r.id) ? { ...r, templateId: tmpl.id, templateName: tmpl.name } : r
+                    ));
+                    handleCloseContextMenu();
+                  }}
+                >
+                  <CheckIcon className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                  {tmpl.name}
+                </button>
+              ))}
+              <div className="border-t my-1" />
+            </>
+          )}
+
+          <button className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100" onClick={() => handleMoveRows('up')}>
+            <ArrowUpIcon className="w-4 h-4 inline mr-2" /> Move Up
+          </button>
+          <button className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100" onClick={() => handleMoveRows('down')}>
+            <ArrowDownIcon className="w-4 h-4 inline mr-2" /> Move Down
+          </button>
+          <div className="border-t my-1" />
           <button
             className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
-            onClick={() => handleMoveRows('up')}
+            onClick={() => { onCopyRows(rows.filter(r => selectedRows.has(r.id))); handleCloseContextMenu(); }}
           >
-            <ArrowUpIcon className="w-4 h-4 inline mr-2" />
-            Move Up
+            <CopyIcon className="w-4 h-4 inline mr-2" /> Copy Selected Rows ({selectedRows.size})
           </button>
-          <button
-            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
-            onClick={() => handleMoveRows('down')}
-          >
-            <ArrowDownIcon className="w-4 h-4 inline mr-2" />
-            Move Down
-          </button>
-          <div className="border-t my-1"></div>
-          <button
-            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
-            onClick={() => {
-              const selected = rows.filter(r => selectedRows.has(r.id));
-              onCopyRows(selected);
-              handleCloseContextMenu();
-            }}
-          >
-            <CopyIcon className="w-4 h-4 inline mr-2" />
-            Copy Selected Rows ({selectedRows.size})
-          </button>
-          <div className="border-t my-1"></div>
+          <div className="border-t my-1" />
           <div className="px-4 py-2">
             <input
-              type="number"
-              min="1"
+              type="number" min="1"
               className="w-full border rounded px-2 py-1 text-sm"
               value={moveToRow}
-              onChange={(e) => setMoveToRow(e.target.value)}
+              onChange={e => setMoveToRow(e.target.value)}
               placeholder="Move to row #"
-              onClick={(e) => e.stopPropagation()}
+              onClick={e => e.stopPropagation()}
             />
-            <button
-              className="w-full mt-1 px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
-              onClick={handleMoveToRow}
-            >
+            <button className="w-full mt-1 px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700" onClick={handleMoveToRow}>
               Move
             </button>
           </div>
-          <div className="border-t my-1"></div>
-          <button
-            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-600"
-            onClick={handleCloseContextMenu}
-          >
+          <div className="border-t my-1" />
+          <button className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-600" onClick={handleCloseContextMenu}>
             Cancel
           </button>
         </div>
