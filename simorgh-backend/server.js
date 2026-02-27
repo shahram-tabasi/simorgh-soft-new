@@ -343,10 +343,16 @@ app.get('/api/tpms/revisions/:scopeId', async (req, res) => {
 // Based on server-example.js (READ-ONLY queries only)
 // ============================================
 
-// Helper to strip junk characters (e.g. ??_??@ encoding artefacts) from SQL text fields
+// Helper to strip junk characters (e.g. ??_??@ encoding artefacts) from SQL text fields.
+// IMPORTANT: This function is applied ONLY in the HTTP response transformation layer
+// (inside transformPartToFrontend, which runs after SELECT results are received).
+// It does NOT issue any SQL commands and does NOT modify the SQL database in any way.
+// The SQL database is READ-ONLY from this application's perspective.
 function cleanText(str) {
   if (str == null) return '';
-  // Some tblPart columns are numeric types in the schema; coerce to string before cleaning
+  // Some tblPart columns are numeric types in the schema; coerce to string before cleaning.
+  // (e.g. numeric columns, Buffer objects). This prevents TypeError from breaking the
+  // entire response when a non-string value appears in a text-mapped field.
   const s = typeof str === 'string' ? str : String(str);
   return s
     .replace(/\?\?_\?\?@/g, '')   // remove specific SQL encoding artefact pattern
@@ -354,7 +360,8 @@ function cleanText(str) {
     .trim();
 }
 
-// Helper function to transform SQL field names to frontend PascalCase format
+// Helper function to transform SQL field names to frontend PascalCase format.
+// Called AFTER data is fetched (read-only SELECT) — never before or during a write.
 function transformPartToFrontend(part) {
   return {
     PartNumber: cleanText(part.partnr),
@@ -474,7 +481,9 @@ app.post('/api/eplan-parts', async (req, res) => {
       console.warn(`⚠️ 0 rows returned. Query: rowStart=${rowStart}, rowEnd=${rowEnd}, where="${whereClause}"`);
     }
 
-    // Transform to frontend format (PascalCase field names)
+    // Transform to frontend format (PascalCase field names).
+    // cleanText() runs here, in-memory, after the SELECT result is received.
+    // No SQL writes occur — the SQL database is never modified.
     const transformedData = dataResult.recordset.map(transformPartToFrontend);
 
     // Get manufacturers list (READ-ONLY) - only on first page to save time
