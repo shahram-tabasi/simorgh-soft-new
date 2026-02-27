@@ -243,7 +243,7 @@ const MainApp: React.FC = () => {
   const tabs = [
     {
       id: 0,
-      title: `1. Project definition - ${projectData.projectName}`,
+      title: `Project Definition`,
       component: (
         <ProjectDefinitionTab
           onComplete={() => setActiveTab(1)}
@@ -254,12 +254,12 @@ const MainApp: React.FC = () => {
     },
     {
       id: 1,
-      title: `2. Create Template - ${projectData.projectName}`,
+      title: `Create Template`,
       component: <TemplateCreationTab onComplete={() => setActiveTab(2)} initialSelectedTemplate={navigatingToTemplateId} />
     },
     {
       id: 2,
-      title: `3. Device Selection - ${projectData.projectName}`,
+      title: `Device Selection`,
       component: (
         <DeviceSelectionTab
           projectData={projectData}
@@ -277,7 +277,7 @@ const MainApp: React.FC = () => {
     },
     {
       id: 3,
-      title: `4. Output Types - ${projectData.projectName}`,
+      title: `Output Types`,
       component: <OutputTypesTab />
     }
   ];

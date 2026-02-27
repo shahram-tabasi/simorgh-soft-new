@@ -395,7 +395,6 @@ export const ProjectDefinitionTab: React.FC<ProjectDefinitionTabProps> = ({
   // ── Style shortcuts ──────────────────────────────────────────
   const inp   = 'col-span-2 border border-gray-300 rounded px-2 py-1 text-sm';
   const secHd = 'text-xs font-bold uppercase tracking-wide text-gray-500 mt-5 mb-2 pb-1 border-b border-gray-200';
-  const numBadge = 'inline-flex items-center justify-center w-5 h-5 bg-gray-200 rounded-full text-[10px] font-bold text-gray-600 mr-2 flex-shrink-0';
 
   // ── Render: Technical Settings ────────────────────────────────
   const renderTechSettings = () => (
@@ -414,9 +413,9 @@ export const ProjectDefinitionTab: React.FC<ProjectDefinitionTabProps> = ({
 
       <p className={secHd}>Wire Size *</p>
       <div className="space-y-3">
-        {[['Control Circuit', 'controlCircuit'], ['CT Secondary', 'ctSecondary'], ['PT Secondary', 'ptSecondary'], ['PLC Power Supply', 'plcPowerSupply']].map(([label, key], i) => (
+        {[['Control Circuit', 'controlCircuit'], ['CT Secondary', 'ctSecondary'], ['PT Secondary', 'ptSecondary'], ['PLC Power Supply', 'plcPowerSupply']].map(([label, key]) => (
           <div key={key} className="grid grid-cols-3 gap-4 items-center">
-            <label className="text-sm flex items-center"><span className={numBadge}>{i + 1}</span>{label}:</label>
+            <label className="text-sm">{label}:</label>
             <input className={inp} value={(techSettings.wireSize as Record<string,string>)[key] ?? ''} onChange={e => setTech('wireSize', key, e.target.value)} />
           </div>
         ))}
@@ -424,9 +423,9 @@ export const ProjectDefinitionTab: React.FC<ProjectDefinitionTabProps> = ({
 
       <p className={secHd}>Wire Color *</p>
       <div className="space-y-3">
-        {[['AC Phase', 'acPhase'], ['DC +', 'dcPlus'], ['AC Neutral', 'acNeutral'], ['DC –', 'dcMinus'], ['PLC Input', 'plcInput'], ['PLC Output', 'plcOutput'], ['3 Phase', 'threePhase']].map(([label, key], i) => (
+        {[['AC Phase', 'acPhase'], ['DC +', 'dcPlus'], ['AC Neutral', 'acNeutral'], ['DC –', 'dcMinus'], ['PLC Input', 'plcInput'], ['PLC Output', 'plcOutput'], ['3 Phase', 'threePhase']].map(([label, key]) => (
           <div key={key} className="grid grid-cols-3 gap-4 items-center">
-            <label className="text-sm flex items-center"><span className={numBadge}>{i + 1}</span>{label}:</label>
+            <label className="text-sm">{label}:</label>
             <input className={inp} value={(techSettings.wireColor as Record<string,string>)[key] ?? ''} onChange={e => setTech('wireColor', key, e.target.value)} />
           </div>
         ))}
@@ -739,6 +738,21 @@ export const ProjectDefinitionTab: React.FC<ProjectDefinitionTabProps> = ({
                 >
                   <CopyIcon className="w-4 h-4 mr-2" /> Copy
                 </button>
+                {copiedDevice && (
+                  <button
+                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center"
+                    onClick={() => {
+                      setPasteNameModal({
+                        visible: true,
+                        targetType: ctxMenu.typeNode,
+                        suggestedName: `${copiedDevice.name} (Copy)`
+                      });
+                      setCtxMenu(prev => ({ ...prev, visible: false }));
+                    }}
+                  >
+                    <ClipboardIcon className="w-4 h-4 mr-2" /> Paste "{copiedDevice.name}"
+                  </button>
+                )}
                 <button
                   className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-red-600 flex items-center"
                   onClick={() => {
