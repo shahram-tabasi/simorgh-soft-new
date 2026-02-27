@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
-import { PlusIcon, UploadIcon, TrashIcon, CopyIcon, ArrowUpIcon, ArrowDownIcon, MaximizeIcon, MinimizeIcon, ChevronDownIcon, ChevronRightIcon, XIcon, InfoIcon, EditIcon, CheckIcon } from 'lucide-react';
+import { PlusIcon, UploadIcon, TrashIcon, CopyIcon, ArrowUpIcon, ArrowDownIcon, MaximizeIcon, MinimizeIcon, ChevronDownIcon, ChevronRightIcon, XIcon, InfoIcon, EditIcon, CheckIcon, ClipboardIcon } from 'lucide-react';
 import { ProjectData, Equipment, DeviceTableRow, TemplateItem } from '../../types/project';
 
 // ===== PROPS INTERFACES =====
@@ -11,6 +11,8 @@ interface DeviceTableProps {
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
   onShowTemplateProperties?: (templateId: string) => void;
+  clipboardRows: DeviceTableRow[];
+  onCopyRows: (rows: DeviceTableRow[]) => void;
 }
 
 interface EquipmentTreeProps {
@@ -20,7 +22,7 @@ interface EquipmentTreeProps {
   copyEquipment: (id: string) => void;
   selectedEquipment: Equipment | null;
   setSelectedEquipment: (equipment: Equipment | null) => void;
-  onNavigateToDeviceLibrary: () => void;
+  onNavigateToDeviceLibrary: (deviceId?: string) => void;
 }
 
 interface DeviceSelectionTabProps {
@@ -33,7 +35,7 @@ interface DeviceSelectionTabProps {
   copyEquipment: (id: string) => void;
   onNext: () => void;
   onNavigateToTemplate?: (templateId: string) => void;
-  onNavigateToDeviceLibrary?: () => void;
+  onNavigateToDeviceLibrary?: (deviceId?: string) => void;
 }
 
 // ===== TEMPLATE PROPERTIES MODAL =====
@@ -187,7 +189,9 @@ const DeviceTable: React.FC<DeviceTableProps> = ({
   projectData,
   isFullscreen,
   onToggleFullscreen,
-  onShowTemplateProperties
+  onShowTemplateProperties,
+  clipboardRows,
+  onCopyRows
 }) => {
   const [rows, setRows] = useState<DeviceTableRow[]>([]);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
@@ -531,6 +535,24 @@ const DeviceTable: React.FC<DeviceTableProps> = ({
             <UploadIcon className="w-4 h-4 inline mr-1" />
             Import Excel
           </button>
+          {clipboardRows.length > 0 && (
+            <button
+              className="px-3 py-1 bg-yellow-500 text-white rounded text-sm hover:bg-yellow-600"
+              title={`Paste ${clipboardRows.length} row(s) from clipboard`}
+              onClick={() => {
+                const now = Date.now();
+                const pasted = clipboardRows.map((r, i) => ({
+                  ...r,
+                  id: `device-${now}-${i}`,
+                  rowNumber: rows.length + i + 1
+                }));
+                setRows(prev => [...prev, ...pasted]);
+              }}
+            >
+              <ClipboardIcon className="w-4 h-4 inline mr-1" />
+              Paste {clipboardRows.length} Row(s)
+            </button>
+          )}
         </div>
       </div>
 
@@ -638,6 +660,18 @@ const DeviceTable: React.FC<DeviceTableProps> = ({
           >
             <ArrowDownIcon className="w-4 h-4 inline mr-2" />
             Move Down
+          </button>
+          <div className="border-t my-1"></div>
+          <button
+            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
+            onClick={() => {
+              const selected = rows.filter(r => selectedRows.has(r.id));
+              onCopyRows(selected);
+              handleCloseContextMenu();
+            }}
+          >
+            <CopyIcon className="w-4 h-4 inline mr-2" />
+            Copy Selected Rows ({selectedRows.size})
           </button>
           <div className="border-t my-1"></div>
           <div className="px-4 py-2">
@@ -1199,8 +1233,9 @@ const EquipmentTree: React.FC<EquipmentTreeProps> = ({
                 <button
                   className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 flex items-center gap-1"
                   onClick={() => {
+                    const libItemId = eq.properties?.deviceLibraryItemId as string | undefined;
                     setEquipPropsModal({ visible: false, equipment: null });
-                    onNavigateToDeviceLibrary();
+                    onNavigateToDeviceLibrary(libItemId);
                   }}
                 >
                   <EditIcon className="w-4 h-4" /> Edit in Device Library
@@ -1228,6 +1263,7 @@ const DeviceSelectionTab: React.FC<DeviceSelectionTabProps> = ({
   onNavigateToDeviceLibrary
 }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [clipboardRows, setClipboardRows] = useState<DeviceTableRow[]>([]);
 
   // Template right-click context menu state (left panel)
   const [templateContextMenu, setTemplateContextMenu] = useState<{
@@ -1348,6 +1384,8 @@ const DeviceSelectionTab: React.FC<DeviceSelectionTabProps> = ({
             isFullscreen={isFullscreen}
             onToggleFullscreen={handleToggleFullscreen}
             onShowTemplateProperties={(templateId) => setPropertiesModal({ visible: true, templateId })}
+            clipboardRows={clipboardRows}
+            onCopyRows={setClipboardRows}
           />
         </div>
 
@@ -1406,6 +1444,8 @@ const DeviceSelectionTab: React.FC<DeviceSelectionTabProps> = ({
               isFullscreen={isFullscreen}
               onToggleFullscreen={handleToggleFullscreen}
               onShowTemplateProperties={(templateId) => setPropertiesModal({ visible: true, templateId })}
+              clipboardRows={clipboardRows}
+              onCopyRows={setClipboardRows}
             />
           </div>
         </div>
@@ -1421,7 +1461,7 @@ const DeviceSelectionTab: React.FC<DeviceSelectionTabProps> = ({
             copyEquipment={copyEquipment}
             selectedEquipment={selectedEquipment}
             setSelectedEquipment={setSelectedEquipment}
-            onNavigateToDeviceLibrary={onNavigateToDeviceLibrary ?? (() => {})}
+            onNavigateToDeviceLibrary={onNavigateToDeviceLibrary ?? ((_id?: string) => {})}
           />
         </div>
       </div>

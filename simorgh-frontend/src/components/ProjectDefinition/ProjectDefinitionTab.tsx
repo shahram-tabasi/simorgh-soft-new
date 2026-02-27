@@ -3,8 +3,52 @@ import { useProject } from '../../context/ProjectContext';
 import { DeviceLibraryItem, DeviceLibraryProperties, TechSettings } from '../../types/project';
 import {
   PlusIcon, EditIcon, TrashIcon, XIcon,
-  ChevronDownIcon, ChevronRightIcon, CheckIcon, SaveIcon
+  ChevronDownIcon, ChevronRightIcon, CheckIcon, SaveIcon, CopyIcon, ClipboardIcon
 } from 'lucide-react';
+
+// ──────────────────────────────────────────────────────────────
+// Stable helper components — MUST live outside any other component
+// so React never unmounts/remounts inputs during typing (focus fix)
+// ──────────────────────────────────────────────────────────────
+const FIELD_CLS = 'text-sm border border-gray-300 rounded px-2 py-1 w-full focus:outline-none focus:border-blue-400';
+const READ_CLS  = 'text-sm text-gray-800 py-1';
+
+interface PropFieldProps {
+  label: string;
+  value: string;
+  isEditable: boolean;
+  onChange: (v: string) => void;
+}
+const PropField: React.FC<PropFieldProps> = ({ label, value, isEditable, onChange }) => (
+  <div className="grid grid-cols-2 gap-3 items-center py-1 border-b border-gray-50">
+    <label className="text-sm text-gray-600">{label}</label>
+    {isEditable
+      ? <input className={FIELD_CLS} value={value} onChange={e => onChange(e.target.value)} />
+      : <span className={READ_CLS}>{value || '—'}</span>
+    }
+  </div>
+);
+
+interface PropCheckboxProps {
+  propKey: string;
+  label: string;
+  checked: boolean;
+  isEditable: boolean;
+  onChange: (v: boolean) => void;
+}
+const PropCheckbox: React.FC<PropCheckboxProps> = ({ propKey, label, checked, isEditable, onChange }) => (
+  <div className="flex items-center gap-3 py-2">
+    <input
+      type="checkbox"
+      id={`chk-${propKey}`}
+      className="w-4 h-4 accent-blue-600"
+      checked={checked}
+      onChange={e => onChange(e.target.checked)}
+      disabled={!isEditable}
+    />
+    <label htmlFor={`chk-${propKey}`} className="text-sm select-none">{label}</label>
+  </div>
+);
 
 // ──────────────────────────────────────────────────────────────
 // Constants
@@ -51,32 +95,7 @@ const DevicePropertiesModal: React.FC<DevicePropertiesModalProps> = ({
     onSave({ id: item?.id ?? `dev-${Date.now()}`, name: name.trim(), type, properties: props });
   };
 
-  const fieldCls = 'text-sm border border-gray-300 rounded px-2 py-1 w-full';
-  const readCls  = 'text-sm text-gray-800 py-1';
-
-  const Field = ({ label, propKey }: { label: string; propKey: keyof DeviceLibraryProperties }) => (
-    <div className="grid grid-cols-2 gap-3 items-center py-1 border-b border-gray-50">
-      <label className="text-sm text-gray-600">{label}</label>
-      {isEditable
-        ? <input className={fieldCls} value={(props[propKey] as string) ?? ''} onChange={e => setProp(propKey, e.target.value)} />
-        : <span className={readCls}>{(props[propKey] as string) || '—'}</span>
-      }
-    </div>
-  );
-
-  const Checkbox = ({ label, propKey }: { label: string; propKey: keyof DeviceLibraryProperties }) => (
-    <div className="flex items-center gap-3 py-2">
-      <input
-        type="checkbox"
-        id={`chk-${propKey}`}
-        className="w-4 h-4 accent-blue-600"
-        checked={!!(props[propKey] as boolean)}
-        onChange={e => setProp(propKey, e.target.checked)}
-        disabled={!isEditable}
-      />
-      <label htmlFor={`chk-${propKey}`} className="text-sm select-none">{label}</label>
-    </div>
-  );
+  // PropField and PropCheckbox are defined at module level to prevent focus loss
 
   const typeColor = type === 'LV' ? 'bg-green-100 text-green-700'
     : type === 'MV' ? 'bg-orange-100 text-orange-700'
@@ -170,51 +189,51 @@ const DevicePropertiesModal: React.FC<DevicePropertiesModalProps> = ({
         <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
           {activeSection === 'electrical' && (
             <div>
-              <Field label="Frequency"                              propKey="frequency" />
-              <Field label="Main Busbar Configuration"             propKey="mainBusbarConfiguration" />
-              <Field label="Main Busbar Rated Current"             propKey="mainBusbarRatedCurrent" />
-              <Field label="Rated Short Time Withstand Current"    propKey="ratedShortTimeWithstandCurrent" />
-              <Field label="Isc"                                   propKey="isc" />
-              <Field label="Height (mm)"                           propKey="height" />
-              <Field label="Width (mm)"                            propKey="width" />
-              <Field label="Depth (mm)"                            propKey="depth" />
-              <Field label="Rated Impulse Withstand Voltage"       propKey="ratedImpulseWithstandVoltage" />
+              <PropField label="Frequency"                              value={props.frequency ?? ''}                              isEditable={isEditable} onChange={v => setProp('frequency', v)} />
+              <PropField label="Main Busbar Configuration"             value={props.mainBusbarConfiguration ?? ''}             isEditable={isEditable} onChange={v => setProp('mainBusbarConfiguration', v)} />
+              <PropField label="Main Busbar Rated Current"             value={props.mainBusbarRatedCurrent ?? ''}             isEditable={isEditable} onChange={v => setProp('mainBusbarRatedCurrent', v)} />
+              <PropField label="Rated Short Time Withstand Current"    value={props.ratedShortTimeWithstandCurrent ?? ''}    isEditable={isEditable} onChange={v => setProp('ratedShortTimeWithstandCurrent', v)} />
+              <PropField label="Isc"                                   value={props.isc ?? ''}                                   isEditable={isEditable} onChange={v => setProp('isc', v)} />
+              <PropField label="Height (mm)"                           value={props.height ?? ''}                           isEditable={isEditable} onChange={v => setProp('height', v)} />
+              <PropField label="Width (mm)"                            value={props.width ?? ''}                            isEditable={isEditable} onChange={v => setProp('width', v)} />
+              <PropField label="Depth (mm)"                            value={props.depth ?? ''}                            isEditable={isEditable} onChange={v => setProp('depth', v)} />
+              <PropField label="Rated Impulse Withstand Voltage"       value={props.ratedImpulseWithstandVoltage ?? ''}       isEditable={isEditable} onChange={v => setProp('ratedImpulseWithstandVoltage', v)} />
             </div>
           )}
           {activeSection === 'control' && (
             <div>
-              <Field label="Control, Protection, Closing, Tripping & Signalling" propKey="controlProtectionClosingTrippingSignalling" />
-              <Field label="Rated Insulation Voltage"              propKey="ratedInsulationVoltage" />
-              <Field label="Service Voltage"                       propKey="serviceVoltage" />
-              <Field label="Spring Charging Motor"                 propKey="springChargingMotor" />
-              <Field label="Switchgear Lighting & Space Heater"    propKey="switchgearLightingSpaceHeater" />
-              <Field label="Motors Space Heater"                   propKey="motorsSpaceHeater" />
-              <Field label="Rated Power-Frequency Withstand Voltage" propKey="ratedPowerFrequencyWithstandVoltage" />
+              <PropField label="Control, Protection, Closing, Tripping & Signalling" value={props.controlProtectionClosingTrippingSignalling ?? ''} isEditable={isEditable} onChange={v => setProp('controlProtectionClosingTrippingSignalling', v)} />
+              <PropField label="Rated Insulation Voltage"              value={props.ratedInsulationVoltage ?? ''}              isEditable={isEditable} onChange={v => setProp('ratedInsulationVoltage', v)} />
+              <PropField label="Service Voltage"                       value={props.serviceVoltage ?? ''}                       isEditable={isEditable} onChange={v => setProp('serviceVoltage', v)} />
+              <PropField label="Spring Charging Motor"                 value={props.springChargingMotor ?? ''}                 isEditable={isEditable} onChange={v => setProp('springChargingMotor', v)} />
+              <PropField label="Switchgear Lighting & Space Heater"    value={props.switchgearLightingSpaceHeater ?? ''}    isEditable={isEditable} onChange={v => setProp('switchgearLightingSpaceHeater', v)} />
+              <PropField label="Motors Space Heater"                   value={props.motorsSpaceHeater ?? ''}                   isEditable={isEditable} onChange={v => setProp('motorsSpaceHeater', v)} />
+              <PropField label="Rated Power-Frequency Withstand Voltage" value={props.ratedPowerFrequencyWithstandVoltage ?? ''} isEditable={isEditable} onChange={v => setProp('ratedPowerFrequencyWithstandVoltage', v)} />
             </div>
           )}
           {activeSection === 'busbar' && (
             <div>
-              <Field label="Main Busbar Size"       propKey="mainBusbarSize" />
-              <Field label="Earth Busbar Size"      propKey="earthBusbarSize" />
-              <Field label="Neutral Busbar Size"    propKey="neutralBusbarSize" />
-              <Field label="RAL"                    propKey="ral" />
-              <Field label="Incoming Connection"    propKey="incomingConnection" />
-              <Field label="Outgoing Connection"    propKey="outgoingConnection" />
-              <Field label="IP"                     propKey="ip" />
-              <Field label="Switchgear Access"      propKey="switchgearAccess" />
-              <Field label="Switchgear Arrangement" propKey="switchgearArrangement" />
-              <Field label="Busbar Type"            propKey="busbarType" />
-              <Field label="Thermofit Cover"        propKey="thermoFitCover" />
-              <Field label="Coating"                propKey="coating" />
+              <PropField label="Main Busbar Size"       value={props.mainBusbarSize ?? ''}       isEditable={isEditable} onChange={v => setProp('mainBusbarSize', v)} />
+              <PropField label="Earth Busbar Size"      value={props.earthBusbarSize ?? ''}      isEditable={isEditable} onChange={v => setProp('earthBusbarSize', v)} />
+              <PropField label="Neutral Busbar Size"    value={props.neutralBusbarSize ?? ''}    isEditable={isEditable} onChange={v => setProp('neutralBusbarSize', v)} />
+              <PropField label="RAL"                    value={props.ral ?? ''}                    isEditable={isEditable} onChange={v => setProp('ral', v)} />
+              <PropField label="Incoming Connection"    value={props.incomingConnection ?? ''}    isEditable={isEditable} onChange={v => setProp('incomingConnection', v)} />
+              <PropField label="Outgoing Connection"    value={props.outgoingConnection ?? ''}    isEditable={isEditable} onChange={v => setProp('outgoingConnection', v)} />
+              <PropField label="IP"                     value={props.ip ?? ''}                     isEditable={isEditable} onChange={v => setProp('ip', v)} />
+              <PropField label="Switchgear Access"      value={props.switchgearAccess ?? ''}      isEditable={isEditable} onChange={v => setProp('switchgearAccess', v)} />
+              <PropField label="Switchgear Arrangement" value={props.switchgearArrangement ?? ''} isEditable={isEditable} onChange={v => setProp('switchgearArrangement', v)} />
+              <PropField label="Busbar Type"            value={props.busbarType ?? ''}            isEditable={isEditable} onChange={v => setProp('busbarType', v)} />
+              <PropField label="Thermofit Cover"        value={props.thermoFitCover ?? ''}        isEditable={isEditable} onChange={v => setProp('thermoFitCover', v)} />
+              <PropField label="Coating"                value={props.coating ?? ''}                isEditable={isEditable} onChange={v => setProp('coating', v)} />
             </div>
           )}
           {activeSection === 'padlock' && (
             <div className="pt-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">Pad Lock Options</p>
               <div className="space-y-1 pl-2">
-                <Checkbox label="C.B ON / OFF"      propKey="padLockCbOnOff" />
-                <Checkbox label="C.B Test / Service" propKey="padLockCbTestService" />
-                <Checkbox label="HV Door"            propKey="padLockHvDoor" />
+                <PropCheckbox propKey="padLockCbOnOff"      label="C.B ON / OFF"      checked={!!props.padLockCbOnOff}      isEditable={isEditable} onChange={v => setProp('padLockCbOnOff', v)} />
+                <PropCheckbox propKey="padLockCbTestService" label="C.B Test / Service" checked={!!props.padLockCbTestService} isEditable={isEditable} onChange={v => setProp('padLockCbTestService', v)} />
+                <PropCheckbox propKey="padLockHvDoor"        label="HV Door"            checked={!!props.padLockHvDoor}        isEditable={isEditable} onChange={v => setProp('padLockHvDoor', v)} />
               </div>
             </div>
           )}
@@ -243,12 +262,13 @@ const DevicePropertiesModal: React.FC<DevicePropertiesModalProps> = ({
 // Main Component
 // ──────────────────────────────────────────────────────────────
 interface ProjectDefinitionTabProps {
-  onComplete:       () => void;
-  requestedSubTab?: SubTab;
+  onComplete:        () => void;
+  requestedSubTab?:  SubTab;
+  requestedDeviceId?: string; // auto-open this device in edit mode from DeviceSelection
 }
 
 export const ProjectDefinitionTab: React.FC<ProjectDefinitionTabProps> = ({
-  onComplete, requestedSubTab
+  onComplete, requestedSubTab, requestedDeviceId
 }) => {
   const { projectData, updateProjectData, saveProject } = useProject();
 
@@ -262,6 +282,11 @@ export const ProjectDefinitionTab: React.FC<ProjectDefinitionTabProps> = ({
     itemId:   string | null;
   }>({ visible: false, x: 0, y: 0, typeNode: null, itemId: null });
 
+  const [copiedDevice, setCopiedDevice] = useState<DeviceLibraryItem | null>(null);
+  const [pasteNameModal, setPasteNameModal] = useState<{
+    visible: boolean; targetType: 'LV' | 'MV' | 'HV' | null; suggestedName: string;
+  }>({ visible: false, targetType: null, suggestedName: '' });
+
   const [deviceModal, setDeviceModal] = useState<{
     visible:  boolean;
     item:     DeviceLibraryItem | null;
@@ -273,6 +298,20 @@ export const ProjectDefinitionTab: React.FC<ProjectDefinitionTabProps> = ({
   useEffect(() => {
     if (requestedSubTab) setActiveSubTab(requestedSubTab);
   }, [requestedSubTab]);
+
+  // Auto-open a specific device in edit mode when navigated from DeviceSelection
+  useEffect(() => {
+    if (requestedDeviceId && requestedSubTab === 'device-library') {
+      const library = projectData.deviceLibrary ?? { LV: [], MV: [], HV: [] };
+      for (const t of ['LV', 'MV', 'HV'] as const) {
+        const found = (library[t] ?? []).find(d => d.id === requestedDeviceId);
+        if (found) {
+          setDeviceModal({ visible: true, item: found, mode: 'edit' });
+          break;
+        }
+      }
+    }
+  }, [requestedDeviceId, requestedSubTab]);
 
   // Close context menu on outside click
   useEffect(() => {
@@ -335,6 +374,18 @@ export const ProjectDefinitionTab: React.FC<ProjectDefinitionTabProps> = ({
   const closeDeviceModal = () => setDeviceModal({ visible: false, item: null, mode: 'add' });
   const handleDeviceSave = (item: DeviceLibraryItem) =>
     deviceModal.mode === 'add' ? addLib(item) : updateLib(item);
+
+  const handlePasteDevice = (newName: string) => {
+    if (!copiedDevice || !pasteNameModal.targetType) return;
+    const pasted: DeviceLibraryItem = {
+      ...copiedDevice,
+      id:   `lib-${Date.now()}`,
+      name: newName.trim() || `${copiedDevice.name} (Copy)`,
+      type: pasteNameModal.targetType
+    };
+    addLib(pasted);
+    setPasteNameModal({ visible: false, targetType: null, suggestedName: '' });
+  };
 
   const typeColor = (t: 'LV' | 'MV' | 'HV') =>
     t === 'LV' ? 'text-green-600 bg-green-50'
@@ -634,20 +685,37 @@ export const ProjectDefinitionTab: React.FC<ProjectDefinitionTabProps> = ({
           style={{ top: ctxMenu.y, left: ctxMenu.x }}
           onClick={e => e.stopPropagation()}
         >
-          {/* Add Device – shown when right-clicking on type header */}
+          {/* Add Device / Paste – shown when right-clicking on type header */}
           {!ctxMenu.itemId && ctxMenu.typeNode && (
-            <button
-              className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center"
-              onClick={() => {
-                setDeviceModal({ visible: true, item: null, mode: 'add', addType: ctxMenu.typeNode! });
-                setCtxMenu(prev => ({ ...prev, visible: false }));
-              }}
-            >
-              <PlusIcon className="w-4 h-4 mr-2" /> Add Device
-            </button>
+            <>
+              <button
+                className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center"
+                onClick={() => {
+                  setDeviceModal({ visible: true, item: null, mode: 'add', addType: ctxMenu.typeNode! });
+                  setCtxMenu(prev => ({ ...prev, visible: false }));
+                }}
+              >
+                <PlusIcon className="w-4 h-4 mr-2" /> Add Device
+              </button>
+              {copiedDevice && (
+                <button
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center"
+                  onClick={() => {
+                    setPasteNameModal({
+                      visible: true,
+                      targetType: ctxMenu.typeNode,
+                      suggestedName: `${copiedDevice.name} (Copy)`
+                    });
+                    setCtxMenu(prev => ({ ...prev, visible: false }));
+                  }}
+                >
+                  <ClipboardIcon className="w-4 h-4 mr-2" /> Paste "{copiedDevice.name}"
+                </button>
+              )}
+            </>
           )}
 
-          {/* Edit / Delete – shown when right-clicking on a specific item */}
+          {/* Edit / Copy / Delete – shown when right-clicking on a specific item */}
           {ctxMenu.itemId && ctxMenu.typeNode && (() => {
             const found = (deviceLibrary[ctxMenu.typeNode] ?? []).find(d => d.id === ctxMenu.itemId);
             if (!found) return null;
@@ -661,6 +729,15 @@ export const ProjectDefinitionTab: React.FC<ProjectDefinitionTabProps> = ({
                   }}
                 >
                   <EditIcon  className="w-4 h-4 mr-2" /> Edit
+                </button>
+                <button
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center"
+                  onClick={() => {
+                    setCopiedDevice(found);
+                    setCtxMenu(prev => ({ ...prev, visible: false }));
+                  }}
+                >
+                  <CopyIcon className="w-4 h-4 mr-2" /> Copy
                 </button>
                 <button
                   className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-red-600 flex items-center"
@@ -694,6 +771,39 @@ export const ProjectDefinitionTab: React.FC<ProjectDefinitionTabProps> = ({
           onSave={handleDeviceSave}
           onClose={closeDeviceModal}
         />
+      )}
+
+      {/* Paste Name Modal */}
+      {pasteNameModal.visible && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-96">
+            <h3 className="text-lg font-semibold mb-4">Paste Device</h3>
+            <label className="block text-sm mb-1 text-gray-600">New Device Name:</label>
+            <input
+              type="text"
+              autoFocus
+              className="w-full border border-gray-300 rounded px-3 py-2 text-sm mb-4"
+              value={pasteNameModal.suggestedName}
+              onChange={e => setPasteNameModal(prev => ({ ...prev, suggestedName: e.target.value }))}
+              onKeyDown={e => { if (e.key === 'Enter') handlePasteDevice(pasteNameModal.suggestedName); }}
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                className="px-4 py-2 border rounded text-sm hover:bg-gray-100"
+                onClick={() => setPasteNameModal({ visible: false, targetType: null, suggestedName: '' })}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50"
+                disabled={!pasteNameModal.suggestedName.trim()}
+                onClick={() => handlePasteDevice(pasteNameModal.suggestedName)}
+              >
+                Paste
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

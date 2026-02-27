@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { TabNavigation } from './components/Tabs/TabNavigation';
 import { ProjectDefinitionTab } from './components/ProjectDefinition/ProjectDefinitionTab';
-import { TemplateCreationTab } from './components/TemplateCreation/TemplateCreationTab';
+import { TemplateCreationTab, KeyboardShortcutsDialog } from './components/TemplateCreation/TemplateCreationTab';
 import DeviceSelectionTab from './components/DeviceSelection/DeviceSelectionTab'; // Changed from named to default import
 import { OutputTypesTab } from './components/OutputTypes/OutputTypesTab';
 import { ProjectSelection } from './components/ProjectSelection/ProjectSelection';
@@ -38,7 +38,8 @@ const useAutoSave = (projectData: any, saveProject: () => Promise<void>) => {
 
 // کامپوننت MenuBar
 const MenuBar: React.FC<{ onShowProjectSelection: () => void }> = ({ onShowProjectSelection }) => {
-  const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  const [activeMenu,    setActiveMenu]    = useState<string | null>(null);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const { projectData, saveProject } = useProject();
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -140,6 +141,13 @@ const MenuBar: React.FC<{ onShowProjectSelection: () => void }> = ({ onShowProje
                 <button className="block w-full text-left px-4 py-2 hover:bg-gray-600">📄 Paste</button>
                 <div className="border-t border-gray-600 my-1"></div>
                 <button className="block w-full text-left px-4 py-2 hover:bg-gray-600">🔍 Find</button>
+                <div className="border-t border-gray-600 my-1"></div>
+                <button
+                  className="block w-full text-left px-4 py-2 hover:bg-gray-600"
+                  onClick={() => { setShowShortcuts(true); setActiveMenu(null); }}
+                >
+                  ⌨️ Keyboard Shortcuts
+                </button>
               </div>
             </div>
           )}
@@ -192,6 +200,7 @@ const MenuBar: React.FC<{ onShowProjectSelection: () => void }> = ({ onShowProje
           <span>Last saved: <strong>{new Date(projectData.changedOn).toLocaleTimeString()}</strong></span>
         </div>
       </div>
+      {showShortcuts && <KeyboardShortcutsDialog onClose={() => setShowShortcuts(false)} />}
     </div>
   );
 };
@@ -202,6 +211,7 @@ const MainApp: React.FC = () => {
   const [navigatingToTemplateId,  setNavigatingToTemplateId]  = useState<string | null>(null);
   // Controls which sub-tab ProjectDefinitionTab opens on
   const [projDefSubTab, setProjDefSubTab] = useState<'project-data' | 'device-library'>('project-data');
+  const [navigatingToDeviceId,    setNavigatingToDeviceId]    = useState<string | undefined>(undefined);
 
   const {
     projectData,
@@ -224,8 +234,9 @@ const MainApp: React.FC = () => {
   };
 
   // Navigate from DeviceSelection → Project Definition → Device Library sub-tab
-  const handleNavigateToDeviceLibrary = () => {
+  const handleNavigateToDeviceLibrary = (deviceId?: string) => {
     setProjDefSubTab('device-library');
+    setNavigatingToDeviceId(deviceId);
     setActiveTab(0);
   };
 
@@ -237,6 +248,7 @@ const MainApp: React.FC = () => {
         <ProjectDefinitionTab
           onComplete={() => setActiveTab(1)}
           requestedSubTab={projDefSubTab}
+          requestedDeviceId={navigatingToDeviceId}
         />
       )
     },
@@ -297,7 +309,7 @@ const MainApp: React.FC = () => {
       <div className="container mx-auto px-4 py-4 flex-1">
         <TabNavigation tabs={tabs} activeTab={activeTab} onTabChange={(tabId) => {
           // When user manually clicks the Project Definition tab, reset to Project Data sub-tab
-          if (tabId === 0) setProjDefSubTab('project-data');
+          if (tabId === 0) { setProjDefSubTab('project-data'); setNavigatingToDeviceId(undefined); }
           setActiveTab(tabId);
         }} />
         <div className="mt-4 bg-white rounded-lg shadow-md p-6">
