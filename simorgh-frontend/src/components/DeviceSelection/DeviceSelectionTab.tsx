@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
-import { PlusIcon, UploadIcon, TrashIcon, CopyIcon, ArrowUpIcon, ArrowDownIcon, MaximizeIcon, MinimizeIcon, ChevronDownIcon, ChevronRightIcon, XIcon, InfoIcon, EditIcon } from 'lucide-react';
+import { PlusIcon, UploadIcon, TrashIcon, CopyIcon, ArrowUpIcon, ArrowDownIcon, MaximizeIcon, MinimizeIcon, ChevronDownIcon, ChevronRightIcon, XIcon, InfoIcon, EditIcon, CheckIcon } from 'lucide-react';
 import { ProjectData, Equipment, DeviceTableRow, TemplateItem } from '../../types/project';
 
 // ===== PROPS INTERFACES =====
@@ -20,6 +20,7 @@ interface EquipmentTreeProps {
   copyEquipment: (id: string) => void;
   selectedEquipment: Equipment | null;
   setSelectedEquipment: (equipment: Equipment | null) => void;
+  onNavigateToDeviceLibrary: () => void;
 }
 
 interface DeviceSelectionTabProps {
@@ -32,6 +33,7 @@ interface DeviceSelectionTabProps {
   copyEquipment: (id: string) => void;
   onNext: () => void;
   onNavigateToTemplate?: (templateId: string) => void;
+  onNavigateToDeviceLibrary?: () => void;
 }
 
 // ===== TEMPLATE PROPERTIES MODAL =====
@@ -724,22 +726,22 @@ const EquipmentTree: React.FC<EquipmentTreeProps> = ({
   deleteEquipment,
   copyEquipment,
   selectedEquipment,
-  setSelectedEquipment
+  setSelectedEquipment,
+  onNavigateToDeviceLibrary
 }) => {
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newType, setNewType] = useState<'LV' | 'MV' | 'HV'>('LV');
+  const [showAddModal,       setShowAddModal]       = useState(false);
+  const [selectedLibItemId,  setSelectedLibItemId]  = useState('');
+  // Equipment properties modal (read-only view with Edit→navigate)
+  const [equipPropsModal, setEquipPropsModal] = useState<{
+    visible: boolean; equipment: Equipment | null
+  }>({ visible: false, equipment: null });
+
   const [contextMenu, setContextMenu] = useState<{
     visible: boolean;
     x: number;
     y: number;
     equipment: Equipment | null
-  }>({
-    visible: false,
-    x: 0,
-    y: 0,
-    equipment: null
-  });
+  }>({ visible: false, x: 0, y: 0, equipment: null });
   const [expandedEquipment, setExpandedEquipment] = useState<Set<string>>(new Set());
   // key: `${equipmentId}::${templateName}`
   const [expandedTemplates, setExpandedTemplates] = useState<Set<string>>(new Set());
@@ -760,19 +762,24 @@ const EquipmentTree: React.FC<EquipmentTreeProps> = ({
   }, [contextMenu.visible]);
 
   const handleCreate = () => {
-    if (newName.trim()) {
-      addEquipment({
-        id: `eq-${Date.now()}`,
-        name: newName,
-        power: '',
-        type: newType,
-        properties: {},
-        devices: []
-      });
-      setNewName('');
-      setNewType('LV');
-      setShowAddModal(false);
+    if (!selectedLibItemId) return;
+    const library = projectData.deviceLibrary ?? { LV: [], MV: [], HV: [] };
+    let found: any = null;
+    for (const t of ['LV', 'MV', 'HV'] as const) {
+      found = (library[t] ?? []).find((d: any) => d.id === selectedLibItemId);
+      if (found) break;
     }
+    if (!found) return;
+    addEquipment({
+      id: `eq-${Date.now()}`,
+      name: found.name,
+      type: found.type,
+      power: '',
+      properties: { deviceLibraryItemId: found.id },
+      devices: []
+    });
+    setSelectedLibItemId('');
+    setShowAddModal(false);
   };
 
   const toggleExpand = (equipmentId: string) => {
@@ -991,6 +998,17 @@ const EquipmentTree: React.FC<EquipmentTreeProps> = ({
           <button
             className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
             onClick={() => {
+              setEquipPropsModal({ visible: true, equipment: contextMenu.equipment });
+              setContextMenu({ visible: false, x: 0, y: 0, equipment: null });
+            }}
+          >
+            <InfoIcon className="w-4 h-4 inline mr-2" />
+            Show Properties
+          </button>
+          <div className="border-t my-1"></div>
+          <button
+            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
+            onClick={() => {
               copyEquipment(contextMenu.equipment!.id);
               setContextMenu({ visible: false, x: 0, y: 0, equipment: null });
             }}
@@ -1021,56 +1039,177 @@ const EquipmentTree: React.FC<EquipmentTreeProps> = ({
         </div>
       )}
 
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded p-6 w-96">
-            <h3 className="font-semibold mb-4">Add Equipment</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm mb-1">Type</label>
-                <select
-                  className="w-full border rounded px-3 py-2"
-                  value={newType}
-                  onChange={(e) => setNewType(e.target.value as 'LV' | 'MV' | 'HV')}
+      {/* ── Add Equipment – pick from Device Library ── */}
+      {showAddModal && (() => {
+        const library = projectData.deviceLibrary ?? { LV: [], MV: [], HV: [] };
+        const allItems = (['LV', 'MV', 'HV'] as const).flatMap(t =>
+          (library[t] ?? []).map(d => ({ ...d, typeLabel: t }))
+        );
+        return (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-[480px] max-h-[80vh] flex flex-col">
+              <h3 className="font-semibold mb-1">Add Equipment from Device Library</h3>
+              <p className="text-xs text-gray-500 mb-4">Select a device and click Add.</p>
+              {allItems.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center text-center text-gray-500 py-8 gap-3">
+                  <p className="text-sm">Device Library is empty.</p>
+                  <p className="text-xs">Go to <strong>Project Definition → Device Library</strong> and add devices first.</p>
+                </div>
+              ) : (
+                <div className="flex-1 overflow-y-auto border rounded mb-4 min-h-0">
+                  {(['LV', 'MV', 'HV'] as const).map(t => {
+                    const items = library[t] ?? [];
+                    if (items.length === 0) return null;
+                    const typeColor = t === 'LV' ? 'text-green-700 bg-green-50' : t === 'MV' ? 'text-orange-700 bg-orange-50' : 'text-red-700 bg-red-50';
+                    return (
+                      <div key={t}>
+                        <div className={`px-3 py-1.5 text-xs font-bold uppercase border-b ${typeColor}`}>{t} – {t === 'LV' ? 'Low Voltage' : t === 'MV' ? 'Medium Voltage' : 'High Voltage'}</div>
+                        {items.map(item => (
+                          <div
+                            key={item.id}
+                            className={`px-4 py-2.5 cursor-pointer text-sm border-b flex items-center justify-between ${
+                              selectedLibItemId === item.id ? 'bg-blue-100 text-blue-800' : 'hover:bg-gray-50'
+                            }`}
+                            onClick={() => setSelectedLibItemId(item.id)}
+                          >
+                            <span>🔧 {item.name}</span>
+                            {selectedLibItemId === item.id && <CheckIcon className="w-4 h-4 text-blue-600" />}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <div className="flex justify-end space-x-2 mt-2">
+                <button
+                  className="px-4 py-2 border rounded text-sm"
+                  onClick={() => { setShowAddModal(false); setSelectedLibItemId(''); }}
                 >
-                  <option value="LV">LV (Low Voltage)</option>
-                  <option value="MV">MV (Medium Voltage)</option>
-                  <option value="HV">HV (High Voltage)</option>
-                </select>
+                  Cancel
+                </button>
+                <button
+                  className="px-4 py-2 bg-blue-600 text-white rounded text-sm disabled:opacity-40"
+                  disabled={!selectedLibItemId}
+                  onClick={handleCreate}
+                >
+                  Add
+                </button>
               </div>
-              <div>
-                <label className="block text-sm mb-1">Name</label>
-                <input
-                  type="text"
-                  className="w-full border rounded px-3 py-2"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Equipment name"
-                  autoFocus
-                />
-              </div>
-            </div>
-            <div className="flex justify-end space-x-2 mt-6">
-              <button
-                className="px-4 py-2 border rounded text-sm"
-                onClick={() => {
-                  setShowAddModal(false);
-                  setNewName('');
-                  setNewType('LV');
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                className="px-4 py-2 bg-blue-600 text-white rounded text-sm"
-                onClick={handleCreate}
-              >
-                Create
-              </button>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
+
+      {/* ── Equipment Properties Modal ── */}
+      {equipPropsModal.visible && equipPropsModal.equipment && (() => {
+        const eq       = equipPropsModal.equipment!;
+        const libId    = eq.properties?.deviceLibraryItemId as string | undefined;
+        const library  = projectData.deviceLibrary ?? { LV: [], MV: [], HV: [] };
+        let libItem: any = null;
+        if (libId) {
+          for (const t of ['LV', 'MV', 'HV'] as const) {
+            libItem = (library[t] ?? []).find((d: any) => d.id === libId);
+            if (libItem) break;
+          }
+        }
+        const p = libItem?.properties ?? {};
+        const Row = ({ label, val }: { label: string; val?: string }) => (
+          val ? <div className="grid grid-cols-2 gap-2 py-1 border-b border-gray-50 text-sm">
+            <span className="text-gray-500">{label}</span>
+            <span className="font-medium">{val}</span>
+          </div> : null
+        );
+        const typeColor = eq.type === 'LV' ? 'bg-green-100 text-green-700' : eq.type === 'MV' ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700';
+        return (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg shadow-2xl w-[640px] max-h-[85vh] flex flex-col">
+              <div className="flex items-center justify-between px-6 py-4 border-b">
+                <div className="flex items-center gap-3">
+                  <h3 className="font-semibold text-lg">{eq.name}</h3>
+                  <span className={`text-xs px-2 py-0.5 rounded font-semibold ${typeColor}`}>{eq.type}</span>
+                </div>
+                <button className="p-1 hover:bg-gray-100 rounded" onClick={() => setEquipPropsModal({ visible: false, equipment: null })}>
+                  <XIcon className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
+                {!libItem ? (
+                  <p className="text-sm text-gray-400 italic">No device library record linked to this equipment.</p>
+                ) : (
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2">Electrical / Mechanical</p>
+                      <Row label="Frequency"                           val={p.frequency} />
+                      <Row label="Main Busbar Configuration"           val={p.mainBusbarConfiguration} />
+                      <Row label="Main Busbar Rated Current"           val={p.mainBusbarRatedCurrent} />
+                      <Row label="Rated Short Time Withstand Current"  val={p.ratedShortTimeWithstandCurrent} />
+                      <Row label="Isc"                                 val={p.isc} />
+                      <Row label="Height (mm)"                         val={p.height} />
+                      <Row label="Width (mm)"                          val={p.width} />
+                      <Row label="Depth (mm)"                          val={p.depth} />
+                      <Row label="Rated Impulse Withstand Voltage"     val={p.ratedImpulseWithstandVoltage} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2">Control & Auxiliary</p>
+                      <Row label="Control/Protection/Closing/Tripping & Signalling" val={p.controlProtectionClosingTrippingSignalling} />
+                      <Row label="Rated Insulation Voltage"            val={p.ratedInsulationVoltage} />
+                      <Row label="Service Voltage"                     val={p.serviceVoltage} />
+                      <Row label="Spring Charging Motor"               val={p.springChargingMotor} />
+                      <Row label="Switchgear Lighting & Space Heater"  val={p.switchgearLightingSpaceHeater} />
+                      <Row label="Motors Space Heater"                 val={p.motorsSpaceHeater} />
+                      <Row label="Rated Power-Frequency Withstand Voltage" val={p.ratedPowerFrequencyWithstandVoltage} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2">Busbar & Construction</p>
+                      <Row label="Main Busbar Size"       val={p.mainBusbarSize} />
+                      <Row label="Earth Busbar Size"      val={p.earthBusbarSize} />
+                      <Row label="Neutral Busbar Size"    val={p.neutralBusbarSize} />
+                      <Row label="RAL"                    val={p.ral} />
+                      <Row label="Incoming Connection"    val={p.incomingConnection} />
+                      <Row label="Outgoing Connection"    val={p.outgoingConnection} />
+                      <Row label="IP"                     val={p.ip} />
+                      <Row label="Switchgear Access"      val={p.switchgearAccess} />
+                      <Row label="Switchgear Arrangement" val={p.switchgearArrangement} />
+                      <Row label="Busbar Type"            val={p.busbarType} />
+                      <Row label="Thermofit Cover"        val={p.thermoFitCover} />
+                      <Row label="Coating"                val={p.coating} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2">Pad Lock</p>
+                      {[['C.B ON / OFF', p.padLockCbOnOff], ['C.B Test / Service', p.padLockCbTestService], ['HV Door', p.padLockHvDoor]].map(([lbl, val]) => (
+                        <div key={lbl as string} className="flex items-center gap-2 py-1 border-b border-gray-50 text-sm">
+                          <span className={`w-4 h-4 rounded border flex items-center justify-center text-xs ${val ? 'bg-blue-600 border-blue-600 text-white' : 'border-gray-300'}`}>
+                            {val ? '✓' : ''}
+                          </span>
+                          <span className="text-gray-700">{lbl as string}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="flex justify-end gap-2 px-6 py-4 border-t bg-gray-50">
+                <button
+                  className="px-4 py-2 border rounded text-sm hover:bg-gray-100"
+                  onClick={() => setEquipPropsModal({ visible: false, equipment: null })}
+                >
+                  Close
+                </button>
+                <button
+                  className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 flex items-center gap-1"
+                  onClick={() => {
+                    setEquipPropsModal({ visible: false, equipment: null });
+                    onNavigateToDeviceLibrary();
+                  }}
+                >
+                  <EditIcon className="w-4 h-4" /> Edit in Device Library
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
@@ -1085,7 +1224,8 @@ const DeviceSelectionTab: React.FC<DeviceSelectionTabProps> = ({
   deleteEquipment,
   copyEquipment,
   onNext,
-  onNavigateToTemplate
+  onNavigateToTemplate,
+  onNavigateToDeviceLibrary
 }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -1281,6 +1421,7 @@ const DeviceSelectionTab: React.FC<DeviceSelectionTabProps> = ({
             copyEquipment={copyEquipment}
             selectedEquipment={selectedEquipment}
             setSelectedEquipment={setSelectedEquipment}
+            onNavigateToDeviceLibrary={onNavigateToDeviceLibrary ?? (() => {})}
           />
         </div>
       </div>

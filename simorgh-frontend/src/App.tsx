@@ -198,8 +198,11 @@ const MenuBar: React.FC<{ onShowProjectSelection: () => void }> = ({ onShowProje
 
 // کامپوننت اصلی اپ
 const MainApp: React.FC = () => {
-  const [activeTab, setActiveTab] = useState(0);
-  const [navigatingToTemplateId, setNavigatingToTemplateId] = useState<string | null>(null);
+  const [activeTab,               setActiveTab]               = useState(0);
+  const [navigatingToTemplateId,  setNavigatingToTemplateId]  = useState<string | null>(null);
+  // Controls which sub-tab ProjectDefinitionTab opens on
+  const [projDefSubTab, setProjDefSubTab] = useState<'project-data' | 'device-library'>('project-data');
+
   const {
     projectData,
     saveProject,
@@ -214,17 +217,28 @@ const MainApp: React.FC = () => {
   // Auto-save
   useAutoSave(projectData, saveProject);
 
-  // Navigate to Template Creation tab and select the given template
+  // Navigate to Template Creation tab
   const handleNavigateToTemplate = (templateId: string) => {
     setNavigatingToTemplateId(templateId);
     setActiveTab(1);
+  };
+
+  // Navigate from DeviceSelection → Project Definition → Device Library sub-tab
+  const handleNavigateToDeviceLibrary = () => {
+    setProjDefSubTab('device-library');
+    setActiveTab(0);
   };
 
   const tabs = [
     {
       id: 0,
       title: `1. Project definition - ${projectData.projectName}`,
-      component: <ProjectDefinitionTab onComplete={() => setActiveTab(1)} />
+      component: (
+        <ProjectDefinitionTab
+          onComplete={() => setActiveTab(1)}
+          requestedSubTab={projDefSubTab}
+        />
+      )
     },
     {
       id: 1,
@@ -245,6 +259,7 @@ const MainApp: React.FC = () => {
           copyEquipment={copyEquipment}
           onNext={() => setActiveTab(3)}
           onNavigateToTemplate={handleNavigateToTemplate}
+          onNavigateToDeviceLibrary={handleNavigateToDeviceLibrary}
         />
       )
     },
@@ -280,7 +295,11 @@ const MainApp: React.FC = () => {
 
       {/* محتوای اصلی */}
       <div className="container mx-auto px-4 py-4 flex-1">
-        <TabNavigation tabs={tabs} activeTab={activeTab} onTabChange={(tabId) => setActiveTab(tabId)} />
+        <TabNavigation tabs={tabs} activeTab={activeTab} onTabChange={(tabId) => {
+          // When user manually clicks the Project Definition tab, reset to Project Data sub-tab
+          if (tabId === 0) setProjDefSubTab('project-data');
+          setActiveTab(tabId);
+        }} />
         <div className="mt-4 bg-white rounded-lg shadow-md p-6">
           {tabs[activeTab].component}
         </div>
@@ -307,8 +326,9 @@ export function App() {
     setShowProjectSelection(false);
   };
 
-  const handleNewProject = () => {
-    setCurrentProject(null);
+  // projectName is the name typed by the user in the "Create New Project" dialog
+  const handleNewProject = (projectName: string) => {
+    setCurrentProject({ projectName });
     setShowProjectSelection(false);
   };
 

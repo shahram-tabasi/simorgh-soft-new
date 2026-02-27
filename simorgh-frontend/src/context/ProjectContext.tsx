@@ -12,7 +12,6 @@ interface ProjectContextType {
   addDevice: (device: Partial<DeviceItem>) => void;
   updateDevice: (deviceId: string, data: Partial<DeviceItem>) => void;
   deleteDevice: (deviceId: string) => void;
-  // ⭐ جدید - Equipment methods
   addEquipment: (equipment: Equipment) => void;
   updateEquipment: (equipmentId: string, data: Partial<Equipment>) => void;
   deleteEquipment: (equipmentId: string) => void;
@@ -23,6 +22,10 @@ interface ProjectContextType {
 
 const defaultProjectData: ProjectData = {
   projectName: 'New Project',
+  projectId: '',
+  projectNumber: '',
+  noticeToProceedDate: '',
+  deliveryDate: '',
   projectDescription: 'Project Description',
   planner: 'SIMORGH',
   designOffice: 'ELECTRO KAVIR',
@@ -57,13 +60,17 @@ const defaultProjectData: ProjectData = {
       enableReducedCrossSection: false
     }
   },
-  templates: {
-    LV: [],
-    MV: [],
-    HV: []
+  techSettings: {
+    general: { altitudeAboveSeaLevel: '1000', designTemperature: '45' },
+    wireSize: { controlCircuit: '1.5', ctSecondary: '2.5', ptSecondary: '2.5', plcPowerSupply: '1.5' },
+    wireColor: { acPhase: 'Brown', dcPlus: 'Red', acNeutral: 'Blue', dcMinus: 'Black', plcInput: 'Green', plcOutput: 'Yellow', threePhase: 'Brown/Black/Grey' },
+    wireManufacturer: { lv: '', mv: '' },
+    others: { thicknessOfPainting: '80', colorType: 'RAL', backgroundColor: '7035', writingColor: '9005' }
   },
+  templates: { LV: [], MV: [], HV: [] },
+  deviceLibrary: { LV: [], MV: [], HV: [] },
   devices: [],
-  equipments: [], // ⭐ جدید
+  equipments: [],
   outputTypes: []
 };
 
@@ -75,7 +82,12 @@ interface ProjectProviderProps {
 }
 
 export const ProjectProvider: React.FC<ProjectProviderProps> = ({ children, initialProject }) => {
-  const [projectData, setProjectData] = useState<ProjectData>(initialProject || defaultProjectData);
+  // Merge supplied initial project with defaults so new/optional fields always exist
+  const [projectData, setProjectData] = useState<ProjectData>(
+    initialProject
+      ? { ...defaultProjectData, ...initialProject }
+      : defaultProjectData
+  );
   const [projectId, setProjectId] = useState<string | null>(initialProject?._id || null);
   const [selectedEquipment, setSelectedEquipment] = useState<Equipment | null>(null); // ⭐ جدید
 

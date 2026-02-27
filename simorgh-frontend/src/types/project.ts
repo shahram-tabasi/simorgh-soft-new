@@ -1,6 +1,100 @@
+// ==============================
+// Device Library Types
+// ==============================
+
+export interface DeviceLibraryProperties {
+  // Electrical / Mechanical
+  frequency?: string;
+  mainBusbarConfiguration?: string;
+  mainBusbarRatedCurrent?: string;
+  ratedShortTimeWithstandCurrent?: string;
+  isc?: string;
+  height?: string;
+  width?: string;
+  depth?: string;
+  ratedImpulseWithstandVoltage?: string;
+  // Control & Auxiliary
+  controlProtectionClosingTrippingSignalling?: string;
+  ratedInsulationVoltage?: string;
+  serviceVoltage?: string;
+  springChargingMotor?: string;
+  switchgearLightingSpaceHeater?: string;
+  motorsSpaceHeater?: string;
+  ratedPowerFrequencyWithstandVoltage?: string;
+  // Busbar & Construction
+  mainBusbarSize?: string;
+  earthBusbarSize?: string;
+  neutralBusbarSize?: string;
+  ral?: string;
+  incomingConnection?: string;
+  outgoingConnection?: string;
+  ip?: string;
+  switchgearAccess?: string;
+  switchgearArrangement?: string;
+  busbarType?: string;
+  thermoFitCover?: string;
+  coating?: string;
+  // Pad Lock Checkboxes
+  padLockCbOnOff?: boolean;
+  padLockCbTestService?: boolean;
+  padLockHvDoor?: boolean;
+}
+
+export interface DeviceLibraryItem {
+  id: string;
+  name: string;
+  type: 'LV' | 'MV' | 'HV';
+  properties: DeviceLibraryProperties;
+}
+
+// ==============================
+// Technical Settings (new structure)
+// ==============================
+
+export interface TechSettings {
+  general: {
+    altitudeAboveSeaLevel: string;
+    designTemperature: string;
+  };
+  wireSize: {
+    controlCircuit: string;
+    ctSecondary: string;
+    ptSecondary: string;
+    plcPowerSupply: string;
+  };
+  wireColor: {
+    acPhase: string;
+    dcPlus: string;
+    acNeutral: string;
+    dcMinus: string;
+    plcInput: string;
+    plcOutput: string;
+    threePhase: string;
+  };
+  wireManufacturer: {
+    lv: string;
+    mv: string;
+  };
+  others: {
+    thicknessOfPainting: string;
+    colorType: string;
+    backgroundColor: string;
+    writingColor: string;
+  };
+}
+
+// ==============================
+// Core Project Data
+// ==============================
+
 export interface ProjectData {
   _id?: string;
   projectName: string;
+  // New master data fields
+  projectId?: string;           // PID
+  projectNumber?: string;       // OE
+  noticeToProceedDate?: string;
+  deliveryDate?: string;
   projectDescription: string;
   planner: string;
   designOffice: string;
@@ -12,6 +106,7 @@ export interface ProjectData {
   country: string;
   language: string;
   comment: string;
+  // Old technical settings kept for backward compatibility (not shown in UI)
   technicalSettings: {
     mediumVoltage: {
       nominalVoltage: string;
@@ -35,10 +130,18 @@ export interface ProjectData {
       enableReducedCrossSection: boolean;
     };
   };
+  // New technical settings structure
+  techSettings?: TechSettings;
   templates: {
     LV: TemplateItem[];
     MV: TemplateItem[];
     HV: TemplateItem[];
+  };
+  // Device Library (new)
+  deviceLibrary?: {
+    LV: DeviceLibraryItem[];
+    MV: DeviceLibraryItem[];
+    HV: DeviceLibraryItem[];
   };
   devices: DeviceItem[];
   equipments: Equipment[];
@@ -86,7 +189,6 @@ export interface DeviceRow {
   busSection: string;
 }
 
-// ⭐ NEW: DeviceTableRow - Used by DeviceSelectionTab component
 export interface DeviceTableRow {
   id: string;
   rowNumber: number;
@@ -101,7 +203,6 @@ export interface DeviceTableRow {
   selectedParts?: SelectedPartEntry[];
 }
 
-// ⭐ UPDATED: Equipment Type - Added properties and devices fields
 export interface Equipment {
   id: string;
   name: string;
@@ -109,8 +210,8 @@ export interface Equipment {
   type: 'LV' | 'MV' | 'HV';
   deviceCount?: number;
   description?: string;
-  properties: Record<string, any>; // ⭐ Added for DeviceSelectionTab
-  devices: DeviceTableRow[];        // ⭐ Added for DeviceSelectionTab
+  properties: Record<string, any>;  // deviceLibraryItemId stored here
+  devices: DeviceTableRow[];
 }
 
 export interface OutputType {
