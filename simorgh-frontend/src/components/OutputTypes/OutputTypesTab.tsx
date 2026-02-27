@@ -1,13 +1,11 @@
 import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { useProject } from '../../context/ProjectContext';
 import {
   FileSpreadsheetIcon, FileTextIcon, FileCode2Icon,
   DownloadIcon, CheckCircleIcon, ChevronDownIcon, ChevronRightIcon
 } from 'lucide-react';
-import { ProjectData, DeviceLibraryProperties } from '../../types/project';
+import { ProjectData } from '../../types/project';
 
 // ── Human-readable labels for DeviceLibraryProperties fields ──
 const DEVICE_PROP_LABELS: Record<string, string> = {
@@ -167,184 +165,117 @@ function exportExcel(data: ProjectData) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EXPORT: PDF
+// EXPORT: PDF  (via browser print-to-PDF — no external library needed)
+// Opens a styled print-ready window; user clicks Print → Save as PDF
 // ─────────────────────────────────────────────────────────────────────────────
 function exportPDF(data: ProjectData) {
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-  const W = doc.internal.pageSize.getWidth();
-  let y = 0;
-
-  const BLUE   = [30,  80, 162] as [number, number, number];
-  const GREEN  = [34, 120,  50] as [number, number, number];
-  const ORANGE = [180, 90,  20] as [number, number, number];
-  const RED    = [160,  30,  30] as [number, number, number];
-  const GRAY   = [245, 245, 248] as [number, number, number];
-
-  const addSectionTitle = (title: string, color: [number,number,number]) => {
-    doc.setFillColor(...color);
-    doc.rect(10, y, W - 20, 8, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.text(title, 14, y + 5.5);
-    doc.setTextColor(0, 0, 0);
-    y += 10;
-  };
-
-  const pageFooter = () => {
-    const total = (doc as any).internal.getNumberOfPages();
-    for (let i = 1; i <= total; i++) {
-      doc.setPage(i);
-      doc.setFontSize(8);
-      doc.setTextColor(150, 150, 150);
-      doc.text(`${data.projectName}  —  Simorgh Design Software`, 14, doc.internal.pageSize.getHeight() - 5);
-      doc.text(`Page ${i} / ${total}`, W - 14, doc.internal.pageSize.getHeight() - 5, { align: 'right' });
-    }
-  };
-
-  // ── Cover / Project Overview ───────────────────────────────────────────────
-  doc.setFillColor(...BLUE);
-  doc.rect(0, 0, W, 28, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(18);
-  doc.setFont('helvetica', 'bold');
-  doc.text('PROJECT REPORT', W / 2, 12, { align: 'center' });
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'normal');
-  doc.text(data.projectName, W / 2, 21, { align: 'center' });
-  doc.setTextColor(0, 0, 0);
-  y = 32;
-
-  addSectionTitle('1. PROJECT OVERVIEW', BLUE);
-
-  autoTable(doc, {
-    startY: y,
-    head: [['Field', 'Value']],
-    body: buildProjectRows(data),
-    theme: 'grid',
-    styles: { fontSize: 8, cellPadding: 2 },
-    headStyles: { fillColor: BLUE, textColor: 255, fontStyle: 'bold' },
-    alternateRowStyles: { fillColor: GRAY },
-    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 60 } },
-    margin: { left: 10, right: 10 },
-  });
-  y = (doc as any).lastAutoTable.finalY + 6;
-
-  // ── Technical Settings ─────────────────────────────────────────────────────
-  const techRows = buildTechRows(data);
-  if (techRows.length > 0) {
-    if (y > 160) { doc.addPage(); y = 15; }
-    addSectionTitle('2. TECHNICAL SETTINGS', [50, 120, 80]);
-    autoTable(doc, {
-      startY: y,
-      head: [['Parameter', 'Value']],
-      body: techRows,
-      theme: 'grid',
-      styles: { fontSize: 8, cellPadding: 2 },
-      headStyles: { fillColor: [50, 120, 80], textColor: 255, fontStyle: 'bold' },
-      alternateRowStyles: { fillColor: GRAY },
-      didParseCell: (info: any) => {
-        // Section sub-headers (second column empty)
-        if (info.row.raw[1] === '' && info.column.index === 0) {
-          info.cell.styles.fillColor = [200, 230, 210];
-          info.cell.styles.fontStyle = 'bold';
-        }
-      },
-      columnStyles: { 0: { cellWidth: 80 } },
-      margin: { left: 10, right: 10 },
-    });
-    y = (doc as any).lastAutoTable.finalY + 6;
-  }
-
-  // ── Device Library ─────────────────────────────────────────────────────────
+  const propKeys  = Object.keys(DEVICE_PROP_LABELS);
   const allDevices = [
     ...(data.deviceLibrary?.LV ?? []).map(d => ({ ...d, tier: 'LV' })),
     ...(data.deviceLibrary?.MV ?? []).map(d => ({ ...d, tier: 'MV' })),
     ...(data.deviceLibrary?.HV ?? []).map(d => ({ ...d, tier: 'HV' })),
   ];
 
-  if (allDevices.length > 0) {
-    if (y > 140) { doc.addPage(); y = 15; }
-    addSectionTitle('3. DEVICE LIBRARY', GREEN);
+  const th  = (label: string, bg = '#1e50a2') =>
+    `<th style="background:${bg};color:#fff;padding:6px 10px;text-align:left;font-size:11px;white-space:nowrap">${label}</th>`;
+  const td  = (val: any, bold = false) =>
+    `<td style="padding:5px 10px;border-bottom:1px solid #e5e7eb;font-size:11px;${bold ? 'font-weight:600;' : ''}">${val ?? '—'}</td>`;
 
-    const propKeys = Object.keys(DEVICE_PROP_LABELS);
-    const devHead = ['#', 'Name', 'Type', ...propKeys.map(k => DEVICE_PROP_LABELS[k])];
-    const devBody = allDevices.map((dev, i) => {
+  const secHd = (n: string, title: string, color: string) =>
+    `<div style="background:${color};color:#fff;padding:6px 14px;border-radius:4px;margin:20px 0 8px;font-size:13px;font-weight:700;letter-spacing:.4px">${n}. ${title}</div>`;
+
+  const table = (rows: string, cols: number) =>
+    `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;margin-bottom:4px">${rows}</table></div>`;
+
+  // ── Project overview table ────────────────────────────────────────────────
+  const projTable = table(
+    `<thead><tr>${th('Field')}${th('Value')}</tr></thead><tbody>` +
+    buildProjectRows(data).map((r, i) =>
+      `<tr style="background:${i%2?'#f7f9fc':'#fff'}">${td(r[0], true)}${td(r[1])}</tr>`
+    ).join('') + '</tbody>',
+    2
+  );
+
+  // ── Technical settings table ──────────────────────────────────────────────
+  const techRows = buildTechRows(data);
+  const techTable = techRows.length === 0 ? '' : table(
+    `<thead><tr>${th('Parameter', '#277548')}${th('Value', '#277548')}</tr></thead><tbody>` +
+    techRows.map((r, i) =>
+      r[1] === ''
+        ? `<tr><td colspan="2" style="padding:5px 10px;font-weight:700;font-size:11px;background:#d1fae5;color:#065f46">${r[0]}</td></tr>`
+        : `<tr style="background:${i%2?'#f7f9fc':'#fff'}">${td(r[0], true)}${td(r[1])}</tr>`
+    ).join('') + '</tbody>',
+    2
+  );
+
+  // ── Device library table ──────────────────────────────────────────────────
+  const devTable = allDevices.length === 0 ? '<p style="color:#9ca3af;font-size:12px">No devices defined.</p>' : table(
+    `<thead><tr>${th('#','#277548')}${th('Name','#277548')}${th('Type','#277548')}${propKeys.map(k => th(DEVICE_PROP_LABELS[k],'#277548')).join('')}</tr></thead><tbody>` +
+    allDevices.map((dev, i) => {
       const p = dev.properties as Record<string, any>;
-      return [
-        i + 1, dev.name, dev.tier,
-        ...propKeys.map(k => typeof p[k] === 'boolean' ? boolStr(p[k]) : v(p[k]))
-      ];
-    });
+      const tc = dev.tier==='LV'?'#065f46':dev.tier==='MV'?'#92400e':'#991b1b';
+      const bg = dev.tier==='LV'?'#d1fae5':dev.tier==='MV'?'#fef3c7':'#fee2e2';
+      return `<tr style="background:${i%2?'#f7f9fc':'#fff'}">${td(i+1)}${td(dev.name, true)}` +
+        `<td style="padding:5px 10px;border-bottom:1px solid #e5e7eb"><span style="background:${bg};color:${tc};padding:1px 6px;border-radius:10px;font-size:10px;font-weight:700">${dev.tier}</span></td>` +
+        propKeys.map(k => td(typeof p[k]==='boolean' ? (p[k]?'✓':'—') : v(p[k]))).join('') + '</tr>';
+    }).join('') + '</tbody>',
+    3 + propKeys.length
+  );
 
-    autoTable(doc, {
-      startY: y,
-      head: [devHead],
-      body: devBody,
-      theme: 'grid',
-      styles: { fontSize: 7, cellPadding: 1.5, overflow: 'linebreak' },
-      headStyles: { fillColor: GREEN, textColor: 255, fontStyle: 'bold', fontSize: 7 },
-      alternateRowStyles: { fillColor: GRAY },
-      columnStyles: {
-        0: { cellWidth: 8 },
-        1: { cellWidth: 30, fontStyle: 'bold' },
-        2: { cellWidth: 12 },
-      },
-      margin: { left: 10, right: 10 },
-    });
-    y = (doc as any).lastAutoTable.finalY + 6;
-  }
-
-  // ── Equipment & Selections ─────────────────────────────────────────────────
-  const equipments = data.equipments ?? [];
-  if (equipments.length > 0) {
-    if (y > 140) { doc.addPage(); y = 15; }
-    addSectionTitle('4. EQUIPMENT & DEVICE SELECTION', ORANGE);
-
-    const eqHead = ['Equipment', 'Type', 'Device (Library)', 'Row', 'Template', 'Bus Section', 'Feeder No', 'Wiring Type', 'Rating Power', 'FLC (A)'];
-    const eqBody: any[][] = [];
-
-    for (const eq of equipments) {
-      const libItemId = eq.properties?.deviceLibraryItemId as string | undefined;
-      const libItem   = libItemId
-        ? [...(data.deviceLibrary?.LV ?? []), ...(data.deviceLibrary?.MV ?? []), ...(data.deviceLibrary?.HV ?? [])].find(d => d.id === libItemId)
-        : null;
-
+  // ── Equipment & selections table ──────────────────────────────────────────
+  const eqs = data.equipments ?? [];
+  const allLib = [...(data.deviceLibrary?.LV??[]),...(data.deviceLibrary?.MV??[]),...(data.deviceLibrary?.HV??[])];
+  const eqTable = eqs.length === 0 ? '<p style="color:#9ca3af;font-size:12px">No equipment defined.</p>' : table(
+    `<thead><tr>${['Equipment','Type','Device (Library)','Row','Template','Bus Section','Feeder No','Wiring Type','Rating Power','FLC (A)'].map(h=>th(h,'#b45309')).join('')}</tr></thead><tbody>` +
+    eqs.flatMap((eq, eqi) => {
+      const libItem = allLib.find(d => d.id === (eq.properties?.deviceLibraryItemId as string));
       if (!eq.devices || eq.devices.length === 0) {
-        eqBody.push([eq.name, eq.type, libItem?.name ?? '—', '—', '—', '—', '—', '—', '—', '—']);
-      } else {
-        eq.devices.forEach((row, ri) => {
-          eqBody.push([
-            ri === 0 ? eq.name    : '',
-            ri === 0 ? eq.type    : '',
-            ri === 0 ? (libItem?.name ?? '—') : '',
-            row.rowNumber,
-            v(row.templateName), v(row.busSection), v(row.feederNo),
-            v(row.wiringType), v(row.ratingPower), v(row.flc)
-          ]);
-        });
+        return [`<tr style="background:${eqi%2?'#fff7ed':'#fff'}">${td(eq.name,true)}${td(eq.type)}${td(libItem?.name??'—')}${Array(7).fill(td('—')).join('')}</tr>`];
       }
-    }
+      return eq.devices.map((row, ri) =>
+        `<tr style="background:${eqi%2?'#fff7ed':'#fff'}">${td(ri===0?eq.name:'',true)}${td(ri===0?eq.type:'')}${td(ri===0?(libItem?.name??'—'):'')}${td(row.rowNumber)}${td(v(row.templateName))}${td(v(row.busSection))}${td(v(row.feederNo))}${td(v(row.wiringType))}${td(v(row.ratingPower))}${td(v(row.flc))}</tr>`
+      );
+    }).join('') + '</tbody>',
+    10
+  );
 
-    autoTable(doc, {
-      startY: y,
-      head: [eqHead],
-      body: eqBody,
-      theme: 'grid',
-      styles: { fontSize: 7.5, cellPadding: 2 },
-      headStyles: { fillColor: ORANGE, textColor: 255, fontStyle: 'bold' },
-      alternateRowStyles: { fillColor: GRAY },
-      columnStyles: {
-        0: { fontStyle: 'bold', cellWidth: 35 },
-        1: { cellWidth: 12 },
-        2: { cellWidth: 35 },
-      },
-      margin: { left: 10, right: 10 },
-    });
-  }
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <title>${data.projectName} — PDF Report</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#111;padding:20px}
+    @page{size:A3 landscape;margin:15mm}
+    @media print{.no-print{display:none}body{padding:0}}
+    table{page-break-inside:auto}tr{page-break-inside:avoid}
+  </style></head><body>
+  <div style="background:linear-gradient(135deg,#1e50a2,#3b82f6);color:#fff;padding:20px 24px;border-radius:8px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center">
+    <div>
+      <div style="font-size:10px;letter-spacing:1px;opacity:.8;margin-bottom:4px">SIMORGH DESIGN SOFTWARE — PROJECT REPORT</div>
+      <div style="font-size:20px;font-weight:800">${data.projectName}</div>
+      <div style="font-size:12px;opacity:.85;margin-top:4px">${v(data.client)} &nbsp;|&nbsp; ${v(data.location)} &nbsp;|&nbsp; ${v(data.standard)}</div>
+    </div>
+    <div style="text-align:right;font-size:11px;opacity:.8">
+      <div>PID: ${v(data.projectId)}</div><div>OE: ${v(data.projectNumber)}</div>
+      <div style="margin-top:4px">${new Date().toLocaleDateString()}</div>
+    </div>
+  </div>
+  <div class="no-print" style="margin-bottom:16px;text-align:right">
+    <button onclick="window.print()" style="background:#1e50a2;color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600">
+      🖨&nbsp; Print / Save as PDF
+    </button>
+  </div>
+  ${secHd('01','Project Overview','#1e50a2')}${projTable}
+  ${techRows.length>0 ? secHd('02','Technical Settings','#277548')+techTable : ''}
+  ${secHd('03','Device Library','#277548')}${devTable}
+  ${secHd('04','Equipment & Device Selections','#b45309')}${eqTable}
+  <div style="margin-top:30px;border-top:1px solid #e5e7eb;padding-top:10px;font-size:10px;color:#9ca3af;display:flex;justify-content:space-between">
+    <span>Simorgh Design Software</span><span>Generated: ${new Date().toLocaleString()}</span>
+  </div>
+  <script>window.onload=()=>{ window.focus(); window.print(); }<\/script>
+  </body></html>`;
 
-  pageFooter();
-  doc.save(`${data.projectName}_Report.pdf`);
+  const win = window.open('', '_blank', 'width=1200,height=900');
+  if (win) { win.document.write(html); win.document.close(); }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
