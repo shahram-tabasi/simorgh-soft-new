@@ -1,198 +1,782 @@
 import React, { useState } from 'react';
+import * as XLSX from 'xlsx';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { useProject } from '../../context/ProjectContext';
-import { PlusIcon, Trash2Icon, FileTextIcon, FileSpreadsheetIcon, FileIcon, ImageIcon } from 'lucide-react';
-import { OutputType } from '../../types/project';
+import {
+  FileSpreadsheetIcon, FileTextIcon, FileCode2Icon,
+  DownloadIcon, CheckCircleIcon, ChevronDownIcon, ChevronRightIcon
+} from 'lucide-react';
+import { ProjectData, DeviceLibraryProperties } from '../../types/project';
 
-export const OutputTypesTab: React.FC = () => {
-  const { projectData, updateProjectData } = useProject();
-  const [outputTypes, setOutputTypes] = useState<OutputType[]>(
-    projectData.outputTypes || [
-      { id: '1', name: 'Single Line Diagram', format: 'PDF', template: 'SLD-01', enabled: true },
-      { id: '2', name: 'Cable Schedule', format: 'Excel', template: 'CS-01', enabled: true },
-      { id: '3', name: 'Load List', format: 'Excel', template: 'LL-01', enabled: false },
-      { id: '4', name: 'Technical Report', format: 'Word', template: 'TR-01', enabled: false },
-      { id: '5', name: 'CAD Drawing', format: 'DWG', template: 'CAD-01', enabled: false },
-    ]
-  );
+// ── Human-readable labels for DeviceLibraryProperties fields ──
+const DEVICE_PROP_LABELS: Record<string, string> = {
+  frequency:                                    'Frequency',
+  mainBusbarConfiguration:                      'Main Busbar Configuration',
+  mainBusbarRatedCurrent:                       'Main Busbar Rated Current (A)',
+  ratedShortTimeWithstandCurrent:               'Rated Short Time Withstand Current (kA)',
+  isc:                                          'ISC (kA)',
+  height:                                       'Height (mm)',
+  width:                                        'Width (mm)',
+  depth:                                        'Depth (mm)',
+  ratedImpulseWithstandVoltage:                 'Rated Impulse Withstand Voltage (kV)',
+  controlProtectionClosingTrippingSignalling:   'Control / Protection / Closing / Tripping / Signalling',
+  ratedInsulationVoltage:                       'Rated Insulation Voltage (V)',
+  serviceVoltage:                               'Service Voltage',
+  springChargingMotor:                          'Spring Charging Motor',
+  switchgearLightingSpaceHeater:                'Switchgear Lighting / Space Heater',
+  motorsSpaceHeater:                            'Motors Space Heater',
+  ratedPowerFrequencyWithstandVoltage:          'Rated Power Frequency Withstand Voltage',
+  mainBusbarSize:                               'Main Busbar Size',
+  earthBusbarSize:                              'Earth Busbar Size',
+  neutralBusbarSize:                            'Neutral Busbar Size',
+  ral:                                          'RAL',
+  incomingConnection:                           'Incoming Connection',
+  outgoingConnection:                           'Outgoing Connection',
+  ip:                                           'IP Rating',
+  switchgearAccess:                             'Switchgear Access',
+  switchgearArrangement:                        'Switchgear Arrangement',
+  busbarType:                                   'Busbar Type',
+  thermoFitCover:                               'Thermo-Fit Cover',
+  coating:                                      'Coating',
+  padLockCbOnOff:                               'Pad Lock CB On / Off',
+  padLockCbTestService:                         'Pad Lock CB Test / Service',
+  padLockHvDoor:                                'Pad Lock HV Door',
+};
 
-  const handleAddOutput = () => {
-    const newOutput: OutputType = {
-      id: `output-${Date.now()}`,
-      name: `New Output ${outputTypes.length + 1}`,
-      format: 'PDF',
-      template: 'TEMPLATE-01',
-      enabled: true
-    };
-    const updated = [...outputTypes, newOutput];
-    setOutputTypes(updated);
-    updateProjectData({ outputTypes: updated });
+// ── Helpers ──────────────────────────────────────────────────────────────────
+const v = (val: any) => (val == null || val === '' ? '—' : String(val));
+const boolStr = (val: any) => (val ? '✓' : '—');
+
+function buildProjectRows(p: ProjectData) {
+  return [
+    ['Project Name',          v(p.projectName)],
+    ['Project ID (PID)',      v(p.projectId)],
+    ['Project Number (OE)',   v(p.projectNumber)],
+    ['Description',           v(p.projectDescription)],
+    ['Client',                v(p.client)],
+    ['Location',              v(p.location)],
+    ['Standard',              v(p.standard)],
+    ['Country',               v(p.country)],
+    ['Language',              v(p.language)],
+    ['Planner',               v(p.planner)],
+    ['Design Office',         v(p.designOffice)],
+    ['Notice to Proceed',     v(p.noticeToProceedDate)],
+    ['Delivery Date',         v(p.deliveryDate)],
+    ['Created On',            v(p.createdOn)],
+    ['Last Modified',         v(p.changedOn)],
+    ['Comment',               v(p.comment)],
+  ];
+}
+
+function buildTechRows(p: ProjectData) {
+  const ts = p.techSettings;
+  if (!ts) return [];
+  return [
+    // General
+    ['General', ''],
+    ['Altitude Above Sea Level (m)',  v(ts.general.altitudeAboveSeaLevel)],
+    ['Design Temperature (°C)',       v(ts.general.designTemperature)],
+    // Wire Size
+    ['Wire Size *', ''],
+    ['Control Circuit',   v(ts.wireSize.controlCircuit)],
+    ['CT Secondary',      v(ts.wireSize.ctSecondary)],
+    ['PT Secondary',      v(ts.wireSize.ptSecondary)],
+    ['PLC Power Supply',  v(ts.wireSize.plcPowerSupply)],
+    // Wire Color
+    ['Wire Color *', ''],
+    ['AC Phase',     v(ts.wireColor.acPhase)],
+    ['DC +',         v(ts.wireColor.dcPlus)],
+    ['AC Neutral',   v(ts.wireColor.acNeutral)],
+    ['DC –',         v(ts.wireColor.dcMinus)],
+    ['PLC Input',    v(ts.wireColor.plcInput)],
+    ['PLC Output',   v(ts.wireColor.plcOutput)],
+    ['3 Phase',      v(ts.wireColor.threePhase)],
+    // Manufacturer
+    ['Wire / Cable Manufacturer *', ''],
+    ['LV', v(ts.wireManufacturer.lv)],
+    ['MV', v(ts.wireManufacturer.mv)],
+    // Others
+    ['Others', ''],
+    ['Thickness of Painting (μm)', v(ts.others.thicknessOfPainting)],
+    ['Color Type',        v(ts.others.colorType)],
+    ['Background Color',  v(ts.others.backgroundColor)],
+    ['Writing Color',     v(ts.others.writingColor)],
+  ];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EXPORT: EXCEL
+// ─────────────────────────────────────────────────────────────────────────────
+function exportExcel(data: ProjectData) {
+  const wb = XLSX.utils.book_new();
+
+  // ── Sheet 1: Project Overview ──────────────────────────────────────────────
+  const projRows = [['Field', 'Value'], ...buildProjectRows(data)];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(projRows), 'Project Overview');
+
+  // ── Sheet 2: Technical Settings ────────────────────────────────────────────
+  const techRows = [['Parameter', 'Value'], ...buildTechRows(data)];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(techRows), 'Technical Settings');
+
+  // ── Sheet 3: Device Library ─────────────────────────────────────────────
+  const propKeys = Object.keys(DEVICE_PROP_LABELS);
+  const devHeaders = ['#', 'Name', 'Type', ...propKeys.map(k => DEVICE_PROP_LABELS[k])];
+  const devRows: any[][] = [devHeaders];
+  let idx = 1;
+  for (const tier of ['LV', 'MV', 'HV'] as const) {
+    for (const dev of (data.deviceLibrary?.[tier] ?? [])) {
+      const p = dev.properties as Record<string, any>;
+      devRows.push([
+        idx++, dev.name, dev.type,
+        ...propKeys.map(k =>
+          typeof p[k] === 'boolean' ? boolStr(p[k]) : v(p[k])
+        )
+      ]);
+    }
+  }
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(devRows), 'Device Library');
+
+  // ── Sheet 4: Equipment & Selections ────────────────────────────────────────
+  const eqHeaders = [
+    '#', 'Equipment', 'Type', 'Device (Library)',
+    'Row', 'Template', 'Bus Section', 'Feeder No', 'Wiring Type', 'Rating Power', 'FLC (A)'
+  ];
+  const eqRows: any[][] = [eqHeaders];
+  let eqIdx = 1;
+  for (const eq of (data.equipments ?? [])) {
+    const libItemId  = eq.properties?.deviceLibraryItemId as string | undefined;
+    const libItem    = libItemId
+      ? [...(data.deviceLibrary?.LV ?? []), ...(data.deviceLibrary?.MV ?? []), ...(data.deviceLibrary?.HV ?? [])].find(d => d.id === libItemId)
+      : null;
+
+    if (!eq.devices || eq.devices.length === 0) {
+      eqRows.push([eqIdx++, eq.name, eq.type, libItem ? libItem.name : '—', '—', '—', '—', '—', '—', '—', '—']);
+    } else {
+      eq.devices.forEach((row, ri) => {
+        eqRows.push([
+          ri === 0 ? eqIdx++ : '', ri === 0 ? eq.name : '', ri === 0 ? eq.type : '', ri === 0 ? (libItem ? libItem.name : '—') : '',
+          row.rowNumber, v(row.templateName), v(row.busSection), v(row.feederNo), v(row.wiringType), v(row.ratingPower), v(row.flc)
+        ]);
+      });
+    }
+  }
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(eqRows), 'Equipment & Selections');
+
+  XLSX.writeFile(wb, `${data.projectName}_Report.xlsx`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EXPORT: PDF
+// ─────────────────────────────────────────────────────────────────────────────
+function exportPDF(data: ProjectData) {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const W = doc.internal.pageSize.getWidth();
+  let y = 0;
+
+  const BLUE   = [30,  80, 162] as [number, number, number];
+  const GREEN  = [34, 120,  50] as [number, number, number];
+  const ORANGE = [180, 90,  20] as [number, number, number];
+  const RED    = [160,  30,  30] as [number, number, number];
+  const GRAY   = [245, 245, 248] as [number, number, number];
+
+  const addSectionTitle = (title: string, color: [number,number,number]) => {
+    doc.setFillColor(...color);
+    doc.rect(10, y, W - 20, 8, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text(title, 14, y + 5.5);
+    doc.setTextColor(0, 0, 0);
+    y += 10;
   };
 
-  const handleDeleteOutput = (id: string) => {
-    const updated = outputTypes.filter(o => o.id !== id);
-    setOutputTypes(updated);
-    updateProjectData({ outputTypes: updated });
-  };
-
-  const handleUpdateOutput = (id: string, field: keyof OutputType, value: any) => {
-    const updated = outputTypes.map(output =>
-      output.id === id ? { ...output, [field]: value } : output
-    );
-    setOutputTypes(updated);
-    updateProjectData({ outputTypes: updated });
-  };
-
-  const getFormatIcon = (format: string) => {
-    switch (format) {
-      case 'PDF':
-        return <FileTextIcon className="w-5 h-5 text-red-600" />;
-      case 'Excel':
-        return <FileSpreadsheetIcon className="w-5 h-5 text-green-600" />;
-      case 'Word':
-        return <FileIcon className="w-5 h-5 text-blue-600" />;
-      case 'DWG':
-        return <ImageIcon className="w-5 h-5 text-purple-600" />;
-      default:
-        return <FileTextIcon className="w-5 h-5 text-gray-600" />;
+  const pageFooter = () => {
+    const total = (doc as any).internal.getNumberOfPages();
+    for (let i = 1; i <= total; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(150, 150, 150);
+      doc.text(`${data.projectName}  —  Simorgh Design Software`, 14, doc.internal.pageSize.getHeight() - 5);
+      doc.text(`Page ${i} / ${total}`, W - 14, doc.internal.pageSize.getHeight() - 5, { align: 'right' });
     }
   };
 
-  return (
-    <div className="flex flex-col h-full">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-semibold">Output Types Configuration</h2>
+  // ── Cover / Project Overview ───────────────────────────────────────────────
+  doc.setFillColor(...BLUE);
+  doc.rect(0, 0, W, 28, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(18);
+  doc.setFont('helvetica', 'bold');
+  doc.text('PROJECT REPORT', W / 2, 12, { align: 'center' });
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'normal');
+  doc.text(data.projectName, W / 2, 21, { align: 'center' });
+  doc.setTextColor(0, 0, 0);
+  y = 32;
+
+  addSectionTitle('1. PROJECT OVERVIEW', BLUE);
+
+  autoTable(doc, {
+    startY: y,
+    head: [['Field', 'Value']],
+    body: buildProjectRows(data),
+    theme: 'grid',
+    styles: { fontSize: 8, cellPadding: 2 },
+    headStyles: { fillColor: BLUE, textColor: 255, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: GRAY },
+    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 60 } },
+    margin: { left: 10, right: 10 },
+  });
+  y = (doc as any).lastAutoTable.finalY + 6;
+
+  // ── Technical Settings ─────────────────────────────────────────────────────
+  const techRows = buildTechRows(data);
+  if (techRows.length > 0) {
+    if (y > 160) { doc.addPage(); y = 15; }
+    addSectionTitle('2. TECHNICAL SETTINGS', [50, 120, 80]);
+    autoTable(doc, {
+      startY: y,
+      head: [['Parameter', 'Value']],
+      body: techRows,
+      theme: 'grid',
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [50, 120, 80], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: GRAY },
+      didParseCell: (info: any) => {
+        // Section sub-headers (second column empty)
+        if (info.row.raw[1] === '' && info.column.index === 0) {
+          info.cell.styles.fillColor = [200, 230, 210];
+          info.cell.styles.fontStyle = 'bold';
+        }
+      },
+      columnStyles: { 0: { cellWidth: 80 } },
+      margin: { left: 10, right: 10 },
+    });
+    y = (doc as any).lastAutoTable.finalY + 6;
+  }
+
+  // ── Device Library ─────────────────────────────────────────────────────────
+  const allDevices = [
+    ...(data.deviceLibrary?.LV ?? []).map(d => ({ ...d, tier: 'LV' })),
+    ...(data.deviceLibrary?.MV ?? []).map(d => ({ ...d, tier: 'MV' })),
+    ...(data.deviceLibrary?.HV ?? []).map(d => ({ ...d, tier: 'HV' })),
+  ];
+
+  if (allDevices.length > 0) {
+    if (y > 140) { doc.addPage(); y = 15; }
+    addSectionTitle('3. DEVICE LIBRARY', GREEN);
+
+    const propKeys = Object.keys(DEVICE_PROP_LABELS);
+    const devHead = ['#', 'Name', 'Type', ...propKeys.map(k => DEVICE_PROP_LABELS[k])];
+    const devBody = allDevices.map((dev, i) => {
+      const p = dev.properties as Record<string, any>;
+      return [
+        i + 1, dev.name, dev.tier,
+        ...propKeys.map(k => typeof p[k] === 'boolean' ? boolStr(p[k]) : v(p[k]))
+      ];
+    });
+
+    autoTable(doc, {
+      startY: y,
+      head: [devHead],
+      body: devBody,
+      theme: 'grid',
+      styles: { fontSize: 7, cellPadding: 1.5, overflow: 'linebreak' },
+      headStyles: { fillColor: GREEN, textColor: 255, fontStyle: 'bold', fontSize: 7 },
+      alternateRowStyles: { fillColor: GRAY },
+      columnStyles: {
+        0: { cellWidth: 8 },
+        1: { cellWidth: 30, fontStyle: 'bold' },
+        2: { cellWidth: 12 },
+      },
+      margin: { left: 10, right: 10 },
+    });
+    y = (doc as any).lastAutoTable.finalY + 6;
+  }
+
+  // ── Equipment & Selections ─────────────────────────────────────────────────
+  const equipments = data.equipments ?? [];
+  if (equipments.length > 0) {
+    if (y > 140) { doc.addPage(); y = 15; }
+    addSectionTitle('4. EQUIPMENT & DEVICE SELECTION', ORANGE);
+
+    const eqHead = ['Equipment', 'Type', 'Device (Library)', 'Row', 'Template', 'Bus Section', 'Feeder No', 'Wiring Type', 'Rating Power', 'FLC (A)'];
+    const eqBody: any[][] = [];
+
+    for (const eq of equipments) {
+      const libItemId = eq.properties?.deviceLibraryItemId as string | undefined;
+      const libItem   = libItemId
+        ? [...(data.deviceLibrary?.LV ?? []), ...(data.deviceLibrary?.MV ?? []), ...(data.deviceLibrary?.HV ?? [])].find(d => d.id === libItemId)
+        : null;
+
+      if (!eq.devices || eq.devices.length === 0) {
+        eqBody.push([eq.name, eq.type, libItem?.name ?? '—', '—', '—', '—', '—', '—', '—', '—']);
+      } else {
+        eq.devices.forEach((row, ri) => {
+          eqBody.push([
+            ri === 0 ? eq.name    : '',
+            ri === 0 ? eq.type    : '',
+            ri === 0 ? (libItem?.name ?? '—') : '',
+            row.rowNumber,
+            v(row.templateName), v(row.busSection), v(row.feederNo),
+            v(row.wiringType), v(row.ratingPower), v(row.flc)
+          ]);
+        });
+      }
+    }
+
+    autoTable(doc, {
+      startY: y,
+      head: [eqHead],
+      body: eqBody,
+      theme: 'grid',
+      styles: { fontSize: 7.5, cellPadding: 2 },
+      headStyles: { fillColor: ORANGE, textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: GRAY },
+      columnStyles: {
+        0: { fontStyle: 'bold', cellWidth: 35 },
+        1: { cellWidth: 12 },
+        2: { cellWidth: 35 },
+      },
+      margin: { left: 10, right: 10 },
+    });
+  }
+
+  pageFooter();
+  doc.save(`${data.projectName}_Report.pdf`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EXPORT: HTML
+// ─────────────────────────────────────────────────────────────────────────────
+function exportHTML(data: ProjectData) {
+  const projRows = buildProjectRows(data);
+  const techRows = buildTechRows(data);
+
+  const tableStyle = `
+    border-collapse:collapse;width:100%;margin-bottom:24px;font-size:13px;
+    box-shadow:0 1px 4px rgba(0,0,0,.1);border-radius:6px;overflow:hidden;
+  `;
+  const thStyle  = (bg: string) => `background:${bg};color:#fff;padding:8px 12px;text-align:left;font-weight:600;letter-spacing:.3px;`;
+  const tdStyle  = `padding:7px 12px;border-bottom:1px solid #eee;`;
+  const tdBStyle = `padding:7px 12px;border-bottom:1px solid #eee;font-weight:600;`;
+  const altStyle = `background:#f7f9fc;`;
+
+  const kv2rows = (rows: string[][], headerBg: string) =>
+    `<table style="${tableStyle}">
+      <thead><tr><th style="${thStyle(headerBg)}">Parameter</th><th style="${thStyle(headerBg)}">Value</th></tr></thead>
+      <tbody>${rows.map((r, i) => {
+        const isSection = r[1] === '';
+        if (isSection) return `<tr style="background:#edf2fb"><td colspan="2" style="${tdBStyle}color:#2a5298">${r[0]}</td></tr>`;
+        return `<tr style="${i % 2 === 1 ? altStyle : ''}">`
+          + `<td style="${tdBStyle}">${r[0]}</td><td style="${tdStyle}">${r[1]}</td></tr>`;
+      }).join('')}
+      </tbody></table>`;
+
+  const sectionHd = (n: string, title: string, color: string) =>
+    `<div style="display:flex;align-items:center;gap:10px;margin:32px 0 10px">
+      <span style="background:${color};color:#fff;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700">${n}</span>
+      <h2 style="margin:0;font-size:16px;color:#222;font-weight:700">${title}</h2>
+     </div>`;
+
+  // Device Library table
+  const allDevices = [
+    ...(data.deviceLibrary?.LV ?? []).map(d => ({ ...d, tier: 'LV' })),
+    ...(data.deviceLibrary?.MV ?? []).map(d => ({ ...d, tier: 'MV' })),
+    ...(data.deviceLibrary?.HV ?? []).map(d => ({ ...d, tier: 'HV' })),
+  ];
+  const propKeys = Object.keys(DEVICE_PROP_LABELS);
+  const devLibTable = allDevices.length === 0 ? '<p style="color:#888">No devices defined.</p>' :
+    `<div style="overflow-x:auto"><table style="${tableStyle}">
+      <thead><tr>
+        <th style="${thStyle('#277548')}">#</th>
+        <th style="${thStyle('#277548')}">Name</th>
+        <th style="${thStyle('#277548')}">Type</th>
+        ${propKeys.map(k => `<th style="${thStyle('#277548')}">${DEVICE_PROP_LABELS[k]}</th>`).join('')}
+      </tr></thead>
+      <tbody>${allDevices.map((dev, i) => {
+        const p = dev.properties as Record<string, any>;
+        return `<tr style="${i % 2 === 1 ? altStyle : ''}">
+          <td style="${tdStyle}">${i + 1}</td>
+          <td style="${tdBStyle}">${dev.name}</td>
+          <td style="${tdStyle}"><span style="background:${dev.tier==='LV'?'#d1fae5':dev.tier==='MV'?'#fde68a':'#fee2e2'};padding:2px 7px;border-radius:10px;font-size:11px;font-weight:700">${dev.tier}</span></td>
+          ${propKeys.map(k => `<td style="${tdStyle}">${typeof p[k] === 'boolean' ? boolStr(p[k]) : v(p[k])}</td>`).join('')}
+        </tr>`;
+      }).join('')}
+      </tbody></table></div>`;
+
+  // Equipment & Selections table
+  const equipments = data.equipments ?? [];
+  const eqTable = equipments.length === 0 ? '<p style="color:#888">No equipment defined.</p>' :
+    `<table style="${tableStyle}">
+      <thead><tr>
+        ${['Equipment','Type','Device (Library)','Row','Template','Bus Section','Feeder No','Wiring Type','Rating Power','FLC (A)']
+          .map(h => `<th style="${thStyle('#b45309')}">${h}</th>`).join('')}
+      </tr></thead>
+      <tbody>${equipments.flatMap((eq, eqi) => {
+        const libItemId = eq.properties?.deviceLibraryItemId as string | undefined;
+        const libItem   = libItemId
+          ? [...(data.deviceLibrary?.LV??[]),...(data.deviceLibrary?.MV??[]),...(data.deviceLibrary?.HV??[])].find(d=>d.id===libItemId)
+          : null;
+        if (!eq.devices || eq.devices.length === 0) {
+          return [`<tr style="${eqi%2===1?altStyle:''}">
+            <td style="${tdBStyle}">${eq.name}</td>
+            <td style="${tdStyle}">${eq.type}</td>
+            <td style="${tdStyle}">${libItem?.name??'—'}</td>
+            ${Array(7).fill(`<td style="${tdStyle}">—</td>`).join('')}
+          </tr>`];
+        }
+        return eq.devices.map((row, ri) =>
+          `<tr style="${(eqi*100+ri)%2===1?altStyle:''}">
+            <td style="${tdBStyle}">${ri===0?eq.name:''}</td>
+            <td style="${tdStyle}">${ri===0?eq.type:''}</td>
+            <td style="${tdStyle}">${ri===0?(libItem?.name??'—'):''}</td>
+            <td style="${tdStyle}">${row.rowNumber}</td>
+            <td style="${tdStyle}">${v(row.templateName)}</td>
+            <td style="${tdStyle}">${v(row.busSection)}</td>
+            <td style="${tdStyle}">${v(row.feederNo)}</td>
+            <td style="${tdStyle}">${v(row.wiringType)}</td>
+            <td style="${tdStyle}">${v(row.ratingPower)}</td>
+            <td style="${tdStyle}">${v(row.flc)}</td>
+          </tr>`
+        );
+      }).join('')}
+      </tbody></table>`;
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>${data.projectName} — Project Report</title>
+  <style>
+    *{box-sizing:border-box}
+    body{font-family:'Segoe UI',Arial,sans-serif;margin:0;background:#f3f4f6;color:#1a1a2e}
+    .page{max-width:1200px;margin:0 auto;padding:32px 24px}
+    @media print{body{background:#fff}.no-print{display:none}.page{max-width:100%;padding:16px}}
+  </style>
+</head>
+<body>
+<div class="page">
+  <!-- Header -->
+  <div style="background:linear-gradient(135deg,#1e50a2 0%,#3b82f6 100%);color:#fff;border-radius:12px;padding:28px 32px;margin-bottom:32px;display:flex;justify-content:space-between;align-items:center">
+    <div>
+      <div style="font-size:11px;letter-spacing:1px;opacity:.8;margin-bottom:4px">SIMORGH DESIGN SOFTWARE</div>
+      <h1 style="margin:0;font-size:24px;font-weight:800">${data.projectName}</h1>
+      <div style="margin-top:6px;font-size:13px;opacity:.85">${v(data.client)} &nbsp;|&nbsp; ${v(data.location)} &nbsp;|&nbsp; ${v(data.standard)}</div>
+    </div>
+    <div style="text-align:right;font-size:12px;opacity:.8">
+      <div>Generated: ${new Date().toLocaleString()}</div>
+      <div>PID: ${v(data.projectId)} &nbsp; OE: ${v(data.projectNumber)}</div>
+    </div>
+  </div>
+
+  <!-- Print button -->
+  <div class="no-print" style="margin-bottom:24px;text-align:right">
+    <button onclick="window.print()" style="background:#1e50a2;color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:13px">
+      🖨 Print / Save as PDF
+    </button>
+  </div>
+
+  ${sectionHd('01', 'Project Overview', '#1e50a2')}
+  ${kv2rows(projRows, '#1e50a2')}
+
+  ${techRows.length > 0 ? sectionHd('02', 'Technical Settings', '#277548') + kv2rows(techRows, '#277548') : ''}
+
+  ${sectionHd('03', 'Device Library', '#277548')}
+  ${devLibTable}
+
+  ${sectionHd('04', 'Equipment &amp; Device Selections', '#b45309')}
+  ${eqTable}
+
+  <div style="margin-top:40px;border-top:1px solid #e5e7eb;padding-top:12px;font-size:11px;color:#9ca3af;display:flex;justify-content:space-between">
+    <span>Simorgh Design Software — Electrical Engineering Design Platform</span>
+    <span>Report date: ${new Date().toLocaleDateString()}</span>
+  </div>
+</div>
+</body>
+</html>`;
+
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = `${data.projectName}_Report.html`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN TAB COMPONENT
+// ─────────────────────────────────────────────────────────────────────────────
+export const OutputTypesTab: React.FC = () => {
+  const { projectData } = useProject();
+  const [downloading, setDownloading] = useState<string | null>(null);
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['project', 'tech', 'devices', 'equipment']));
+
+  const trigger = async (key: string, fn: () => void) => {
+    setDownloading(key);
+    await new Promise(r => setTimeout(r, 80)); // let UI update
+    try { fn(); } finally { setDownloading(null); }
+  };
+
+  const toggleSection = (key: string) =>
+    setExpandedSections(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+
+  const lib     = projectData.deviceLibrary;
+  const devices = [...(lib?.LV ?? []), ...(lib?.MV ?? []), ...(lib?.HV ?? [])];
+  const eqs     = projectData.equipments ?? [];
+  const rowTotal = eqs.reduce((s, eq) => s + (eq.devices?.length ?? 0), 0);
+
+  const Section: React.FC<{ id: string; title: string; badge: string; color: string; children: React.ReactNode }> = ({ id, title, badge, color, children }) => {
+    const open = expandedSections.has(id);
+    return (
+      <div className="border border-gray-200 rounded-lg overflow-hidden mb-3">
         <button
-          className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm flex items-center hover:bg-blue-700"
-          onClick={handleAddOutput}
+          className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 text-left"
+          onClick={() => toggleSection(id)}
         >
-          <PlusIcon className="w-4 h-4 mr-1" />
-          Add Output Type
+          <div className="flex items-center gap-3">
+            <span className={`text-xs font-bold px-2 py-0.5 rounded-full text-white`} style={{ background: color }}>{badge}</span>
+            <span className="font-medium text-sm text-gray-800">{title}</span>
+          </div>
+          {open ? <ChevronDownIcon className="w-4 h-4 text-gray-400" /> : <ChevronRightIcon className="w-4 h-4 text-gray-400" />}
         </button>
+        {open && <div className="p-4 border-t border-gray-100 bg-white">{children}</div>}
+      </div>
+    );
+  };
+
+  const Row: React.FC<{ label: string; value?: string }> = ({ label, value }) => (
+    <div className="flex gap-2 py-1 border-b border-gray-50 text-sm">
+      <span className="w-48 text-gray-500 flex-shrink-0">{label}</span>
+      <span className="text-gray-800 font-medium">{value || '—'}</span>
+    </div>
+  );
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h2 className="text-xl font-bold text-gray-800">Project Report &amp; Export</h2>
+          <p className="text-sm text-gray-500 mt-0.5">{projectData.projectName}</p>
+        </div>
+        {/* Export Buttons */}
+        <div className="flex gap-3">
+          <button
+            disabled={!!downloading}
+            onClick={() => trigger('xlsx', () => exportExcel(projectData))}
+            className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-60 shadow-sm font-medium text-sm transition-colors"
+          >
+            {downloading === 'xlsx'
+              ? <span className="animate-spin">⏳</span>
+              : <FileSpreadsheetIcon className="w-4 h-4" />}
+            Excel (.xlsx)
+          </button>
+          <button
+            disabled={!!downloading}
+            onClick={() => trigger('pdf', () => exportPDF(projectData))}
+            className="flex items-center gap-2 px-5 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-60 shadow-sm font-medium text-sm transition-colors"
+          >
+            {downloading === 'pdf'
+              ? <span className="animate-spin">⏳</span>
+              : <FileTextIcon className="w-4 h-4" />}
+            PDF Report
+          </button>
+          <button
+            disabled={!!downloading}
+            onClick={() => trigger('html', () => exportHTML(projectData))}
+            className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-60 shadow-sm font-medium text-sm transition-colors"
+          >
+            {downloading === 'html'
+              ? <span className="animate-spin">⏳</span>
+              : <FileCode2Icon className="w-4 h-4" />}
+            HTML Report
+          </button>
+        </div>
       </div>
 
-      <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-4">
-        <h3 className="font-medium text-blue-900 mb-2">📋 Output Types Guide</h3>
-        <p className="text-sm text-blue-800">
-          Configure the types of outputs/reports you want to generate from your project data.
-          Enable/disable outputs, select formats, and assign templates for each type.
-        </p>
+      {/* Summary Strip */}
+      <div className="grid grid-cols-4 gap-3 mb-6">
+        {[
+          { label: 'Project',   value: projectData.projectName, color: 'bg-blue-50 border-blue-200 text-blue-700' },
+          { label: 'Devices',   value: `${devices.length} in library`, color: 'bg-green-50 border-green-200 text-green-700' },
+          { label: 'Equipment', value: `${eqs.length} units`,           color: 'bg-orange-50 border-orange-200 text-orange-700' },
+          { label: 'Rows',      value: `${rowTotal} selection rows`,    color: 'bg-purple-50 border-purple-200 text-purple-700' },
+        ].map(c => (
+          <div key={c.label} className={`border rounded-lg px-4 py-3 ${c.color}`}>
+            <div className="text-xs font-semibold uppercase tracking-wide opacity-70">{c.label}</div>
+            <div className="text-sm font-bold mt-0.5">{c.value}</div>
+          </div>
+        ))}
       </div>
 
-      <div className="border border-gray-200 rounded-md overflow-hidden flex-1">
-        <table className="w-full">
-          <thead>
-            <tr className="bg-gray-50">
-              <th className="px-4 py-3 text-left text-sm font-medium text-gray-600 border-b w-12">
-                Enabled
-              </th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-gray-600 border-b">
-                Output Name
-              </th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-gray-600 border-b w-32">
-                Format
-              </th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-gray-600 border-b">
-                Template
-              </th>
-              <th className="px-4 py-3 text-center text-sm font-medium text-gray-600 border-b w-24">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {outputTypes.map((output, index) => (
-              <tr key={output.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                <td className="px-4 py-3 text-sm border-b">
-                  <input
-                    type="checkbox"
-                    checked={output.enabled}
-                    onChange={(e) => handleUpdateOutput(output.id, 'enabled', e.target.checked)}
-                    className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-                  />
-                </td>
-                <td className="px-4 py-3 text-sm border-b">
-                  <input
-                    type="text"
-                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-                    value={output.name}
-                    onChange={(e) => handleUpdateOutput(output.id, 'name', e.target.value)}
-                  />
-                </td>
-                <td className="px-4 py-3 text-sm border-b">
-                  <div className="flex items-center">
-                    {getFormatIcon(output.format)}
-                    <select
-                      className="ml-2 border border-gray-300 rounded px-2 py-1 text-sm"
-                      value={output.format}
-                      onChange={(e) => handleUpdateOutput(output.id, 'format', e.target.value as any)}
-                    >
-                      <option value="PDF">PDF</option>
-                      <option value="Excel">Excel</option>
-                      <option value="Word">Word</option>
-                      <option value="DWG">DWG</option>
-                    </select>
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-sm border-b">
-                  <input
-                    type="text"
-                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-                    value={output.template}
-                    onChange={(e) => handleUpdateOutput(output.id, 'template', e.target.value)}
-                  />
-                </td>
-                <td className="px-4 py-3 text-sm border-b text-center">
-                  <button
-                    className="p-1 text-red-600 hover:bg-red-50 rounded"
-                    onClick={() => handleDeleteOutput(output.id)}
-                    title="Delete"
-                  >
-                    <Trash2Icon className="w-4 h-4" />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="mt-4 grid grid-cols-2 gap-4">
-        <div className="border border-gray-200 rounded-md p-4">
-          <h3 className="font-medium mb-2">📊 Statistics</h3>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-600">Total Outputs:</span>
-              <span className="font-medium">{outputTypes.length}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Enabled:</span>
-              <span className="font-medium text-green-600">
-                {outputTypes.filter(o => o.enabled).length}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Disabled:</span>
-              <span className="font-medium text-red-600">
-                {outputTypes.filter(o => !o.enabled).length}
-              </span>
-            </div>
+      {/* Data Preview */}
+      <Section id="project" title="Project Overview" badge="01" color="#1e50a2">
+        <div className="grid grid-cols-2 gap-x-8">
+          <div>
+            <Row label="Project Name"         value={projectData.projectName} />
+            <Row label="Project ID (PID)"     value={projectData.projectId} />
+            <Row label="Project Number (OE)"  value={projectData.projectNumber} />
+            <Row label="Client"               value={projectData.client} />
+            <Row label="Location"             value={projectData.location} />
+            <Row label="Standard"             value={projectData.standard} />
+            <Row label="Country"              value={projectData.country} />
+            <Row label="Language"             value={projectData.language} />
+          </div>
+          <div>
+            <Row label="Planner"              value={projectData.planner} />
+            <Row label="Design Office"        value={projectData.designOffice} />
+            <Row label="Notice to Proceed"    value={projectData.noticeToProceedDate} />
+            <Row label="Delivery Date"        value={projectData.deliveryDate} />
+            <Row label="Created On"           value={projectData.createdOn} />
+            <Row label="Last Modified"        value={projectData.changedOn} />
+            <Row label="Description"          value={projectData.projectDescription} />
+            <Row label="Comment"              value={projectData.comment} />
           </div>
         </div>
+      </Section>
 
-        <div className="border border-gray-200 rounded-md p-4">
-          <h3 className="font-medium mb-2">📝 Format Distribution</h3>
-          <div className="space-y-2 text-sm">
-            {['PDF', 'Excel', 'Word', 'DWG'].map(format => {
-              const count = outputTypes.filter(o => o.format === format).length;
-              return (
-                <div key={format} className="flex justify-between">
-                  <span className="text-gray-600">{format}:</span>
-                  <span className="font-medium">{count}</span>
+      <Section id="tech" title="Technical Settings" badge="02" color="#277548">
+        {!projectData.techSettings
+          ? <p className="text-sm text-gray-400">No technical settings defined.</p>
+          : (() => {
+            const ts = projectData.techSettings!;
+            return (
+              <div className="grid grid-cols-2 gap-x-8">
+                <div>
+                  <p className="text-xs font-bold uppercase text-gray-400 mb-2">General</p>
+                  <Row label="Altitude (m)"              value={ts.general.altitudeAboveSeaLevel} />
+                  <Row label="Design Temperature (°C)"   value={ts.general.designTemperature} />
+                  <p className="text-xs font-bold uppercase text-gray-400 mt-3 mb-2">Wire Size *</p>
+                  <Row label="Control Circuit"  value={ts.wireSize.controlCircuit} />
+                  <Row label="CT Secondary"     value={ts.wireSize.ctSecondary} />
+                  <Row label="PT Secondary"     value={ts.wireSize.ptSecondary} />
+                  <Row label="PLC Power Supply" value={ts.wireSize.plcPowerSupply} />
+                  <p className="text-xs font-bold uppercase text-gray-400 mt-3 mb-2">Wire / Cable Manufacturer *</p>
+                  <Row label="LV" value={ts.wireManufacturer.lv} />
+                  <Row label="MV" value={ts.wireManufacturer.mv} />
                 </div>
-              );
-            })}
-          </div>
-        </div>
+                <div>
+                  <p className="text-xs font-bold uppercase text-gray-400 mb-2">Wire Color *</p>
+                  <Row label="AC Phase"    value={ts.wireColor.acPhase} />
+                  <Row label="DC +"        value={ts.wireColor.dcPlus} />
+                  <Row label="AC Neutral"  value={ts.wireColor.acNeutral} />
+                  <Row label="DC –"        value={ts.wireColor.dcMinus} />
+                  <Row label="PLC Input"   value={ts.wireColor.plcInput} />
+                  <Row label="PLC Output"  value={ts.wireColor.plcOutput} />
+                  <Row label="3 Phase"     value={ts.wireColor.threePhase} />
+                  <p className="text-xs font-bold uppercase text-gray-400 mt-3 mb-2">Others</p>
+                  <Row label="Thickness of Painting (μm)" value={ts.others.thicknessOfPainting} />
+                  <Row label="Color Type"       value={ts.others.colorType} />
+                  <Row label="Background Color" value={ts.others.backgroundColor} />
+                  <Row label="Writing Color"    value={ts.others.writingColor} />
+                </div>
+              </div>
+            );
+          })()
+        }
+      </Section>
+
+      <Section id="devices" title={`Device Library (${devices.length} devices)`} badge="03" color="#277548">
+        {devices.length === 0
+          ? <p className="text-sm text-gray-400">No devices defined in library.</p>
+          : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="bg-green-700 text-white">
+                    <th className="px-3 py-2 text-left">#</th>
+                    <th className="px-3 py-2 text-left">Name</th>
+                    <th className="px-3 py-2 text-left">Type</th>
+                    {Object.values(DEVICE_PROP_LABELS).map(l => <th key={l} className="px-3 py-2 text-left whitespace-nowrap">{l}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {devices.map((dev, i) => {
+                    const p = dev.properties as Record<string, any>;
+                    const tierColor = dev.type === 'LV' ? 'bg-green-100 text-green-800' : dev.type === 'MV' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800';
+                    return (
+                      <tr key={dev.id} className={i % 2 === 1 ? 'bg-gray-50' : 'bg-white'}>
+                        <td className="px-3 py-1.5 border-b border-gray-100">{i + 1}</td>
+                        <td className="px-3 py-1.5 border-b border-gray-100 font-semibold">{dev.name}</td>
+                        <td className="px-3 py-1.5 border-b border-gray-100">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${tierColor}`}>{dev.type}</span>
+                        </td>
+                        {Object.keys(DEVICE_PROP_LABELS).map(k => (
+                          <td key={k} className="px-3 py-1.5 border-b border-gray-100 whitespace-nowrap">
+                            {typeof p[k] === 'boolean' ? boolStr(p[k]) : v(p[k])}
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )
+        }
+      </Section>
+
+      <Section id="equipment" title={`Equipment & Device Selections (${eqs.length} units, ${rowTotal} rows)`} badge="04" color="#b45309">
+        {eqs.length === 0
+          ? <p className="text-sm text-gray-400">No equipment defined.</p>
+          : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="bg-orange-700 text-white">
+                    {['Equipment','Type','Device (Library)','Row','Template','Bus Section','Feeder No','Wiring Type','Rating Power','FLC (A)']
+                      .map(h => <th key={h} className="px-3 py-2 text-left whitespace-nowrap">{h}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {eqs.flatMap((eq, eqi) => {
+                    const libItemId = eq.properties?.deviceLibraryItemId as string | undefined;
+                    const libItem   = libItemId
+                      ? [...(lib?.LV??[]),...(lib?.MV??[]),...(lib?.HV??[])].find(d=>d.id===libItemId)
+                      : null;
+                    const rowBg = eqi % 2 === 1 ? 'bg-orange-50' : 'bg-white';
+                    if (!eq.devices || eq.devices.length === 0) {
+                      return [(
+                        <tr key={eq.id} className={rowBg}>
+                          <td className="px-3 py-1.5 border-b font-semibold">{eq.name}</td>
+                          <td className="px-3 py-1.5 border-b">{eq.type}</td>
+                          <td className="px-3 py-1.5 border-b">{libItem?.name ?? '—'}</td>
+                          {Array(7).fill(null).map((_, i) => <td key={i} className="px-3 py-1.5 border-b text-gray-400">—</td>)}
+                        </tr>
+                      )];
+                    }
+                    return eq.devices.map((row, ri) => (
+                      <tr key={row.id} className={rowBg}>
+                        <td className="px-3 py-1.5 border-b font-semibold">{ri === 0 ? eq.name : ''}</td>
+                        <td className="px-3 py-1.5 border-b">{ri === 0 ? eq.type : ''}</td>
+                        <td className="px-3 py-1.5 border-b">{ri === 0 ? (libItem?.name ?? '—') : ''}</td>
+                        <td className="px-3 py-1.5 border-b">{row.rowNumber}</td>
+                        <td className="px-3 py-1.5 border-b">{v(row.templateName)}</td>
+                        <td className="px-3 py-1.5 border-b">{v(row.busSection)}</td>
+                        <td className="px-3 py-1.5 border-b">{v(row.feederNo)}</td>
+                        <td className="px-3 py-1.5 border-b">{v(row.wiringType)}</td>
+                        <td className="px-3 py-1.5 border-b">{v(row.ratingPower)}</td>
+                        <td className="px-3 py-1.5 border-b">{v(row.flc)}</td>
+                      </tr>
+                    ));
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )
+        }
+      </Section>
+
+      <div className="mt-4 flex items-center gap-2 text-xs text-gray-400">
+        <CheckCircleIcon className="w-3.5 h-3.5 text-green-500" />
+        All three formats contain identical data — Project Overview, Technical Settings, Device Library, and Equipment & Selections.
+        <DownloadIcon className="w-3.5 h-3.5 ml-2" />
+        HTML report includes a "Print / Save as PDF" button for browser-based PDF export.
       </div>
     </div>
   );
