@@ -1041,16 +1041,6 @@ const EquipmentTree: React.FC<EquipmentTreeProps> = ({
           </button>
           <div className="border-t my-1"></div>
           <button
-            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
-            onClick={() => {
-              copyEquipment(contextMenu.equipment!.id);
-              setContextMenu({ visible: false, x: 0, y: 0, equipment: null });
-            }}
-          >
-            <CopyIcon className="w-4 h-4 inline mr-2" />
-            Copy
-          </button>
-          <button
             className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-red-600"
             onClick={() => {
               if (confirm('Delete this equipment?')) {
