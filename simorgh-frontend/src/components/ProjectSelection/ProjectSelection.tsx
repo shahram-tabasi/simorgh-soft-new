@@ -5,17 +5,19 @@ import simorghLogo from '../../assets/simrgh.jpg';
 
 interface ProjectSelectionProps {
   onProjectSelect: (project: ProjectData) => void;
-  onNewProject: () => void;
+  onNewProject:    (projectName: string) => void;
 }
 
 export const ProjectSelection: React.FC<ProjectSelectionProps> = ({
   onProjectSelect,
   onNewProject,
 }) => {
-  const [projects, setProjects] = useState<ProjectData[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [projects,       setProjects]       = useState<ProjectData[]>([]);
+  const [searchTerm,     setSearchTerm]     = useState('');
+  const [loading,        setLoading]        = useState(true);
+  const [error,          setError]          = useState<string | null>(null);
+  const [showNameModal,  setShowNameModal]  = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
 
   useEffect(() => {
     loadProjects();
@@ -41,6 +43,12 @@ export const ProjectSelection: React.FC<ProjectSelectionProps> = ({
 
   const handleProjectSelect = (project: ProjectData) => {
     onProjectSelect(project);
+  };
+
+  const handleCreateConfirm = () => {
+    const name = newProjectName.trim();
+    if (!name) return;
+    onNewProject(name);
   };
 
   if (loading) {
@@ -69,6 +77,40 @@ export const ProjectSelection: React.FC<ProjectSelectionProps> = ({
         </div>
       </div>
 
+      {/* New Project Name Modal */}
+      {showNameModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-96">
+            <h3 className="text-lg font-semibold mb-4">New Project</h3>
+            <label className="block text-sm mb-1 text-gray-600">Project Name:</label>
+            <input
+              type="text"
+              autoFocus
+              className="w-full border border-gray-300 rounded px-3 py-2 text-sm mb-4"
+              placeholder="Enter project name…"
+              value={newProjectName}
+              onChange={e => setNewProjectName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleCreateConfirm(); }}
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                className="px-4 py-2 border rounded text-sm hover:bg-gray-100"
+                onClick={() => setShowNameModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50"
+                disabled={!newProjectName.trim()}
+                onClick={handleCreateConfirm}
+              >
+                Create
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Main Content */}
       <div className="container mx-auto px-4 py-8 flex-1">
         <div className="max-w-4xl mx-auto">
@@ -85,10 +127,10 @@ export const ProjectSelection: React.FC<ProjectSelectionProps> = ({
                 />
               </div>
               <button
-                onClick={onNewProject}
+                onClick={() => { setNewProjectName(''); setShowNameModal(true); }}
                 className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 whitespace-nowrap"
               >
-                Create New Project
+                + Create New Project
               </button>
             </div>
           </div>
@@ -108,7 +150,7 @@ export const ProjectSelection: React.FC<ProjectSelectionProps> = ({
                 {searchTerm ? 'No projects found matching your search.' : 'No projects found.'}
                 <br />
                 <button
-                  onClick={onNewProject}
+                  onClick={() => { setNewProjectName(''); setShowNameModal(true); }}
                   className="text-blue-600 hover:text-blue-800 mt-2"
                 >
                   Create a new project
