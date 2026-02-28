@@ -79,7 +79,7 @@ const PartSelectionDialog: React.FC<PartSelectionDialogProps> = ({
     setError(null);
 
     try {
-      const response = await fetch('http://localhost:3001/api/eplan-parts', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/eplan-parts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -137,7 +137,7 @@ const PartSelectionDialog: React.FC<PartSelectionDialogProps> = ({
     if (!selectedPart) return;
 
     try {
-      const response = await fetch('http://localhost:3001/api/save-part-to-mongo', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/save-part-to-mongo`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

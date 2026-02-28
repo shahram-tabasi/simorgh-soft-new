@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { Search, RefreshCw, ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 
 const PAGE_SIZE = 100;
-const API_URL = 'http://localhost:3001';
+const API_URL = import.meta.env.VITE_API_URL || '';
 
 export interface SelectedPart {
   PartNumber: string;
