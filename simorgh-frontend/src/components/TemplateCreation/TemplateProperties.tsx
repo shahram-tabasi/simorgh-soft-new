@@ -419,9 +419,14 @@ const PartDetailsPanel: React.FC<{ part: any }> = ({ part }) => {
   ];
 
   // Every raw column returned by SQL (cleaned on the backend), excluding empties.
-  const rawEntries = Object.entries(part?.Raw || {}).filter(
-    ([, v]) => v !== null && v !== undefined && String(v).trim() !== ''
+  // Show EVERY column returned from SQL Server (including empty ones), sorted by
+  // name, so the full database schema can be reviewed and each column identified.
+  const rawEntries = Object.entries(part?.Raw || {}).sort(([a], [b]) =>
+    a.toLowerCase().localeCompare(b.toLowerCase())
   );
+  const filledCount = rawEntries.filter(
+    ([, v]) => v !== null && v !== undefined && String(v).trim() !== ''
+  ).length;
 
   return (
     <div>
@@ -478,13 +483,36 @@ const PartDetailsPanel: React.FC<{ part: any }> = ({ part }) => {
       )}
 
       {activeTab === 'all' && (
-        <div className="space-y-2">
+        <div>
+          <p className="text-xs text-gray-500 mb-3">
+            All SQL Server columns for this part: <strong>{rawEntries.length}</strong> total
+            {' '}(<strong>{filledCount}</strong> with data,{' '}
+            <strong>{rawEntries.length - filledCount}</strong> empty)
+          </p>
           {rawEntries.length === 0 ? (
-            <p className="text-sm text-gray-400">No additional fields returned from SQL Server.</p>
+            <p className="text-sm text-gray-400">No columns returned from SQL Server.</p>
           ) : (
-            rawEntries.map(([key, value]) => (
-              <DetailRow key={key} label={key} value={toStr(value)} />
-            ))
+            <div className="space-y-2">
+              {rawEntries.map(([key, value]) => {
+                const str = toStr(value);
+                return (
+                  <div
+                    key={key}
+                    className={`grid grid-cols-3 gap-4 ${str.trim() === '' ? 'opacity-60' : ''}`}
+                  >
+                    <div className="text-sm font-medium text-gray-600 break-all">{key}:</div>
+                    <div className="col-span-2">
+                      <input
+                        type="text"
+                        className="w-full border border-gray-300 rounded px-2 py-1 text-sm bg-white"
+                        value={str === '' ? '(empty)' : str}
+                        readOnly
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       )}
