@@ -359,23 +359,7 @@ const PartSelectionDialog: React.FC<PartSelectionDialogProps> = ({
           {/* Part Details */}
           <div className="w-1/2 overflow-y-auto p-6 bg-gray-50">
             {selectedPart ? (
-              <div>
-                <h3 className="text-lg font-semibold mb-4 text-blue-900">📋 Part Details</h3>
-                <div className="space-y-3">
-                  <DetailRow label="Product group" value={selectedPart.ProductGroup} />
-                  <DetailRow label="Product subgroup" value={selectedPart.ProductSubgroup} />
-                  <DetailRow label="Part number" value={selectedPart.PartNumber} highlight />
-                  <DetailRow label="ERP number" value={selectedPart.ERPNumber} />
-                  <DetailRow label="Type number" value={selectedPart.TypeNumber} />
-                  <DetailRow label="Designation 1" value={selectedPart.Designation1} />
-                  <DetailRow label="Designation 2" value={selectedPart.Designation2} />
-                  <DetailRow label="Designation 3" value={selectedPart.Designation3} />
-                  <DetailRow label="Manufacturer" value={selectedPart.Manufacturer} highlight />
-                  <DetailRow label="Supplier" value={selectedPart.Supplier} />
-                  <DetailRow label="Order number" value={selectedPart.OrderNumber} />
-                  <DetailRow label="Description" value={selectedPart.Description} multiline />
-                </div>
-              </div>
+              <PartDetailsPanel part={selectedPart} />
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-gray-400">
                 <div className="text-6xl mb-4">📦</div>
@@ -415,6 +399,95 @@ const PartSelectionDialog: React.FC<PartSelectionDialogProps> = ({
           </div>
         </div>
       </div>
+    </div>
+  );
+};
+
+// Convert any value (number, boolean, null) into a display string.
+const toStr = (v: any): string =>
+  v === null || v === undefined || v === '' ? '' : String(v);
+
+// Tabbed part details panel — shows the complete part record read from SQL Server,
+// split into General / Technical Data / All Fields tabs.
+const PartDetailsPanel: React.FC<{ part: any }> = ({ part }) => {
+  const [activeTab, setActiveTab] = useState<'general' | 'technical' | 'all'>('general');
+
+  const tabs: { id: 'general' | 'technical' | 'all'; label: string }[] = [
+    { id: 'general', label: '📋 General' },
+    { id: 'technical', label: '⚙️ Technical Data' },
+    { id: 'all', label: '🗂️ All Fields' },
+  ];
+
+  // Every raw column returned by SQL (cleaned on the backend), excluding empties.
+  const rawEntries = Object.entries(part?.Raw || {}).filter(
+    ([, v]) => v !== null && v !== undefined && String(v).trim() !== ''
+  );
+
+  return (
+    <div>
+      <h3 className="text-lg font-semibold mb-3 text-blue-900">
+        📋 Part Details — {part.PartNumber}
+      </h3>
+
+      {/* Tabs */}
+      <div className="flex gap-1 mb-4 border-b border-gray-200">
+        {tabs.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+              activeTab === tab.id
+                ? 'bg-white border border-b-0 border-gray-200 text-blue-700 -mb-px'
+                : 'text-gray-500 hover:text-blue-600'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'general' && (
+        <div className="space-y-3">
+          <DetailRow label="Product group" value={part.ProductGroup} />
+          <DetailRow label="Product subgroup" value={part.ProductSubgroup} />
+          <DetailRow label="Part number" value={part.PartNumber} highlight />
+          <DetailRow label="ERP number" value={part.ERPNumber} />
+          <DetailRow label="Type number" value={part.TypeNumber} />
+          <DetailRow label="Order number" value={part.OrderNumber} highlight />
+          <DetailRow label="Manufacturer" value={part.Manufacturer} highlight />
+          <DetailRow label="Supplier" value={part.Supplier} />
+          <DetailRow label="Designation 1" value={part.Designation1} />
+          <DetailRow label="Designation 2" value={part.Designation2} />
+          <DetailRow label="Designation 3" value={part.Designation3} highlight />
+          <DetailRow label="Description" value={part.Description} highlight multiline />
+        </div>
+      )}
+
+      {activeTab === 'technical' && (
+        <div className="space-y-3">
+          <DetailRow label="Width" value={toStr(part.Width)} />
+          <DetailRow label="Height" value={toStr(part.Height)} />
+          <DetailRow label="Depth" value={toStr(part.Depth)} />
+          <DetailRow label="Weight" value={toStr(part.Weight)} />
+          <DetailRow label="Mounting location" value={part.MountingLocation} />
+          <DetailRow label="Mounting space" value={part.MountingSpace} />
+          <DetailRow label="Certificate CE" value={toStr(part.CertificateCE)} />
+          <DetailRow label="Certificate UL" value={toStr(part.CertificateUL)} />
+          <DetailRow label="Certificate ATEX" value={toStr(part.CertificateATEX)} />
+        </div>
+      )}
+
+      {activeTab === 'all' && (
+        <div className="space-y-2">
+          {rawEntries.length === 0 ? (
+            <p className="text-sm text-gray-400">No additional fields returned from SQL Server.</p>
+          ) : (
+            rawEntries.map(([key, value]) => (
+              <DetailRow key={key} label={key} value={toStr(value)} />
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 };

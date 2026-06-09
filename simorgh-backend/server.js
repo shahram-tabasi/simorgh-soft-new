@@ -360,17 +360,55 @@ function cleanText(str) {
     .trim();
 }
 
+// Clean a single value: text fields get cleanText(), numeric/other values pass through.
+// Read-only helper — never issues SQL.
+function cleanValue(v) {
+  if (v == null) return '';
+  if (typeof v === 'string') return cleanText(v);
+  return v; // keep numbers / booleans as-is
+}
+
+// Case-insensitively pick the first non-empty value among candidate column names.
+// SQL schemas vary in column casing/naming, so we probe several likely names.
+// Read-only — only reads already-fetched row data.
+function pickColumn(part, candidates) {
+  const keys = Object.keys(part);
+  for (const cand of candidates) {
+    const found = keys.find(k => k.toLowerCase() === cand.toLowerCase());
+    if (found != null && part[found] != null && String(part[found]).trim() !== '') {
+      return part[found];
+    }
+  }
+  return '';
+}
+
 // Helper function to transform SQL field names to frontend PascalCase format.
 // Called AFTER data is fetched (read-only SELECT) — never before or during a write.
 function transformPartToFrontend(part) {
+  // Pass through EVERY raw column (cleaned) so the frontend can display the
+  // complete part record tab-by-tab and nothing read from SQL is lost.
+  const raw = {};
+  for (const key of Object.keys(part)) {
+    if (key === 'RowNum') continue; // internal pagination column, not part data
+    raw[key] = cleanValue(part[key]);
+  }
+
   return {
     PartNumber: cleanText(part.partnr),
     TypeNumber: cleanText(part.typenr),
     OrderNumber: cleanText(part.ordernr),
+    // ERP / Supplier / Description column names differ between EPLAN schemas;
+    // probe the common variants and fall back to '' if none exist.
+    ERPNumber: cleanText(pickColumn(part, ['erpnr', 'erp_nr', 'erpnumber', 'erp'])),
     Manufacturer: cleanText(part.manufacturer),
+    Supplier: cleanText(pickColumn(part, ['supplier', 'suppliername', 'supplier_name'])),
     Designation1: cleanText(part.description1),
     Designation2: cleanText(part.description2),
     Designation3: cleanText(part.description3),
+    Description: cleanText(pickColumn(part, [
+      'description', 'descr', 'longdescription', 'productdescription',
+      'partdescription', 'note', 'remark', 'comment', 'longtext', 'text'
+    ])),
     ProductGroup: cleanText(part.productgroup),
     ProductSubgroup: cleanText(part.productsubgroup),
     Width: part.width,
@@ -382,6 +420,8 @@ function transformPartToFrontend(part) {
     CertificateCE: part.certificate_CE,
     CertificateUL: part.certificate_UL,
     CertificateATEX: part.certificate_ATEX,
+    // Full cleaned raw row for the "All Fields" tab in the part details panel.
+    Raw: raw,
   };
 }
 
