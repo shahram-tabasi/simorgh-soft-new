@@ -213,7 +213,11 @@
 
                 <div class="full">
                     <label>محتوای مقاله (Content)</label>
-                    <textarea id="editor"></textarea>
+                    <textarea id="editor" class="blog-input" style="min-height:320px;direction:rtl"></textarea>
+                    <div id="editorFallbackNote" style="display:none;font-size:12px;color:#dc3545;margin-top:6px">
+                        <i class="fas fa-triangle-exclamation"></i>
+                        ادیتور پیشرفته بارگذاری نشد (دسترسی به CDN ناموفق). فعلاً می‌توانید محتوای HTML را در همین کادر بنویسید.
+                    </div>
                     <%-- مقدار واقعی که به سرور می‌رود؛ قبل از Postback از CKEditor پر می‌شود --%>
                     <asp:HiddenField ID="hfContent" runat="server" ClientIDMode="Static" />
                     <div style="margin-top:10px">
@@ -418,8 +422,9 @@
     </asp:Panel>
 
     <%-- ===================== CKEditor 5 + اسکریپت‌های صفحه ===================== --%>
-    <link rel="stylesheet" href="https://cdn.ckeditor.com/ckeditor5/44.1.0/ckeditor5.css" />
-    <script src="https://cdn.ckeditor.com/ckeditor5/44.1.0/ckeditor5.umd.js"></script>
+    <%-- CKEditor 5 از jsDelivr (در ایران معمولاً در دسترس است). در صورت بلاک بودن، نسخهٔ لوکال را جایگزین کنید. --%>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ckeditor5@44.1.0/dist/ckeditor5.css" />
+    <script src="https://cdn.jsdelivr.net/npm/ckeditor5@44.1.0/dist/ckeditor5.umd.js"></script>
     <script>
         var blogEditor = null;
 
@@ -453,9 +458,16 @@
             document.getElementById('gDesc').textContent = (md && md.value) ? md.value : 'توضیحات متا اینجا نمایش داده می‌شود...';
         }
 
-        // قبل از هر Postback، محتوای CKEditor را در hidden field بریز
+        // قبل از هر Postback، محتوای ادیتور را در hidden field بریز
+        // اگر CKEditor لود نشده بود، از متن خام textarea استفاده کن (fallback)
         function syncEditor() {
-            if (blogEditor) document.getElementById('hfContent').value = blogEditor.getData();
+            var hf = document.getElementById('hfContent');
+            if (blogEditor) {
+                hf.value = blogEditor.getData();
+            } else {
+                var ta = document.getElementById('editor');
+                hf.value = ta ? ta.value : '';
+            }
             return true;
         }
 
@@ -494,7 +506,16 @@
         // راه‌اندازی CKEditor 5
         function initEditor() {
             var ta = document.getElementById('editor');
-            if (!ta || typeof CKEDITOR === 'undefined') return;
+            if (!ta) return;
+            // مقدار اولیه (هنگام ویرایش) را داخل textarea بگذار تا هم ادیتور آن را بخواند و هم fallback داشته باشیم
+            var initial = document.getElementById('hfContent').value;
+            if (initial && !ta.value) ta.value = initial;
+
+            // اگر اسکریپت CKEditor لود نشده بود، textarea ساده باقی می‌ماند و پیام هشدار نشان داده می‌شود
+            if (typeof CKEDITOR === 'undefined') {
+                document.getElementById('editorFallbackNote').style.display = 'block';
+                return;
+            }
             const {
                 ClassicEditor, Essentials, Paragraph, Heading, Bold, Italic, Underline,
                 Link, BlockQuote, CodeBlock, List, Indent,
@@ -543,9 +564,7 @@
                 language: { content: 'fa' }
             }).then(function (editor) {
                 blogEditor = editor;
-                // بارگذاری مقدار اولیه از hidden field (هنگام ویرایش)
-                var initial = document.getElementById('hfContent').value;
-                if (initial) editor.setData(initial);
+                // مقدار اولیه از خود textarea خوانده می‌شود (در initEditor ست شد)
                 // شمارش کلمات
                 try {
                     var wc = editor.plugins.get('WordCount');
