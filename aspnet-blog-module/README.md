@@ -8,9 +8,19 @@ ContentPlaceHolderهای همان MasterPage قرار گرفته است
 
 | فایل | توضیح |
 |------|-------|
-| `Admin/BlogPosts.aspx` | رابط کاربری (لیست + فرم) — وابسته به `~/Admin/Admin.master` |
-| `Admin/BlogPosts.aspx.cs` | منطق صفحه با ADO.NET و Stored Procedureها (بدون لایه‌بندی) |
-| `SQL/BlogModule.sql` | کل جداول، ایندکس‌ها، FKها و تمام Stored Procedureها |
+| `Admin/BlogPosts.aspx` (+ `.cs`) | پنل مدیریت مقالات — وابسته به `~/Admin/Admin.master` |
+| `Blog.aspx` (+ `.cs`) | **سمت کاربر:** لیست عمومی مقالات — وابسته به `~/User.master` (ریشهٔ سایت) |
+| `BlogDetails.aspx` (+ `.cs`) | **سمت کاربر:** نمایش یک مقاله با Slug — وابسته به `~/User.master` |
+| `SQL/BlogModule.sql` | جداول، ایندکس‌ها، FKها و Stored Procedureهای پنل مدیریت |
+| `SQL/BlogModule_Frontend.sql` | Stored Procedureهای سمت کاربر (لیست/جزئیات/جدیدترین‌ها) |
+
+### صفحات سمت کاربر (Front-End)
+- `Blog.aspx` و `BlogDetails.aspx` را در **ریشهٔ سایت** (کنار `User.master`) کپی کنید.
+- فایل `SQL/BlogModule_Frontend.sql` را هم روی دیتابیس اجرا کنید.
+- فقط مقالات منتشرشده (`IsActive = 1`) نمایش داده می‌شوند؛ بازدید هر مقاله هنگام باز شدن
+  جزئیات افزایش می‌یابد؛ متاتگ‌های سئو (description/keywords) خودکار به `<head>` اضافه می‌شوند؛
+  فهرست مطالب، زمان مطالعه، گالری، ویدیو (آپارات/یوتیوب/فایل) و فایل‌های ضمیمه پشتیبانی می‌شوند.
+- لینک «وبلاگ» در منوی `User.master` از قبل به `Blog.aspx` اشاره می‌کند.
 
 ## نصب — ۴ گام
 
