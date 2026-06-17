@@ -69,6 +69,33 @@
         .seo-preview .g-url   { color:#006621; font-size:13px; margin:2px 0; direction:ltr; text-align:left; }
         .seo-preview .g-desc  { color:#545454; font-size:13px; }
         .ck-editor__editable { min-height: 320px; }
+        /* ===== ادیتور آفلاین (RTE) ===== */
+        .rte-wrap { border:1px solid var(--border-light); border-radius:12px; overflow:hidden; background:var(--card-light); }
+        body.dark-mode .rte-wrap { border-color:var(--border-dark); background:var(--card-dark); }
+        .rte-toolbar { display:flex; flex-wrap:wrap; gap:4px; padding:8px; border-bottom:1px solid var(--border-light); background:rgba(102,126,234,.05); }
+        body.dark-mode .rte-toolbar { border-bottom-color:var(--border-dark); }
+        .rte-toolbar button { width:34px; height:32px; border:none; border-radius:7px; background:transparent; color:var(--text-light); cursor:pointer; font-size:14px; transition:all .15s ease; }
+        body.dark-mode .rte-toolbar button { color:var(--text-dark); }
+        .rte-toolbar button:hover { background:rgba(102,126,234,.18); color:#667eea; }
+        .rte-sel { height:32px; border:1px solid var(--border-light); border-radius:7px; background:var(--bg-light); color:var(--text-light); font-size:12px; padding:0 6px; cursor:pointer; }
+        body.dark-mode .rte-sel { background:var(--bg-dark); color:var(--text-dark); border-color:var(--border-dark); }
+        .rte-sep { width:1px; background:var(--border-light); margin:2px 4px; }
+        .rte-color { position:relative; width:34px; height:32px; display:inline-flex; align-items:center; justify-content:center; border-radius:7px; cursor:pointer; color:var(--text-light); }
+        body.dark-mode .rte-color { color:var(--text-dark); }
+        .rte-color:hover { background:rgba(102,126,234,.18); color:#667eea; }
+        .rte-color input { position:absolute; inset:0; opacity:0; cursor:pointer; }
+        .rte-area { min-height:320px; max-height:600px; overflow:auto; padding:16px 18px; outline:none; line-height:2; font-size:14px; }
+        .rte-area:empty:before { content:attr(data-ph); color:#aaa; }
+        .rte-area img { max-width:100%; height:auto; border-radius:8px; }
+        .rte-area table { border-collapse:collapse; width:100%; margin:10px 0; }
+        .rte-area table td, .rte-area table th { border:1px solid var(--border-light); padding:8px; }
+        .rte-area blockquote { border-right:4px solid #667eea; margin:10px 0; padding:6px 14px; background:rgba(102,126,234,.06); border-radius:6px; }
+        .rte-area pre { background:#1e1e2e; color:#e2e8f0; padding:14px; border-radius:8px; overflow:auto; direction:ltr; text-align:left; }
+        .rte-area iframe { max-width:100%; border-radius:8px; }
+        .rte-source { width:100%; min-height:320px; border:none; padding:14px; font-family:Consolas,monospace; font-size:13px; background:var(--bg-light); color:var(--text-light); outline:none; }
+        body.dark-mode .rte-source { background:var(--bg-dark); color:var(--text-dark); }
+        .rte-wrap.full { position:fixed; inset:0; z-index:99999; border-radius:0; display:flex; flex-direction:column; }
+        .rte-wrap.full .rte-area { max-height:none; flex:1; }
         .ck-fullscreen { position: fixed !important; inset: 0 !important; z-index: 99999 !important; background: var(--bg-light); padding: 16px; overflow:auto; }
         body.dark-mode .ck-fullscreen { background: var(--bg-dark); }
         .stat-chip { display:inline-block; background:rgba(102,126,234,.1); color:#667eea; padding:6px 14px; border-radius:20px; font-size:12px; font-weight:600; margin-left:8px; }
@@ -217,18 +244,56 @@
 
                 <div class="full">
                     <label>محتوای مقاله (Content)</label>
-                    <textarea id="editor" class="blog-input" style="min-height:320px;direction:rtl"></textarea>
-                    <div id="editorFallbackNote" style="display:none;font-size:12px;color:#dc3545;margin-top:6px">
-                        <i class="fas fa-triangle-exclamation"></i>
-                        ادیتور پیشرفته بارگذاری نشد (دسترسی به CDN ناموفق). فعلاً می‌توانید محتوای HTML را در همین کادر بنویسید.
+
+                    <%-- ادیتور آفلاین (بدون هیچ CDN) --%>
+                    <div class="rte-wrap" id="rteWrap">
+                        <div class="rte-toolbar" id="rteToolbar">
+                            <select class="rte-sel" title="قالب" onchange="rteBlock(this.value);this.selectedIndex=0;">
+                                <option value="">قالب متن</option>
+                                <option value="H1">سرتیتر 1 (H1)</option>
+                                <option value="H2">سرتیتر 2 (H2)</option>
+                                <option value="H3">سرتیتر 3 (H3)</option>
+                                <option value="H4">سرتیتر 4 (H4)</option>
+                                <option value="H5">سرتیتر 5 (H5)</option>
+                                <option value="H6">سرتیتر 6 (H6)</option>
+                                <option value="P">پاراگراف</option>
+                            </select>
+                            <button type="button" title="درشت" onclick="rte('bold')"><i class="fas fa-bold"></i></button>
+                            <button type="button" title="کج" onclick="rte('italic')"><i class="fas fa-italic"></i></button>
+                            <button type="button" title="زیرخط" onclick="rte('underline')"><i class="fas fa-underline"></i></button>
+                            <button type="button" title="خط‌خورده" onclick="rte('strikeThrough')"><i class="fas fa-strikethrough"></i></button>
+                            <span class="rte-sep"></span>
+                            <button type="button" title="لیست نقطه‌ای" onclick="rte('insertUnorderedList')"><i class="fas fa-list-ul"></i></button>
+                            <button type="button" title="لیست عددی" onclick="rte('insertOrderedList')"><i class="fas fa-list-ol"></i></button>
+                            <button type="button" title="راست‌چین" onclick="rte('justifyRight')"><i class="fas fa-align-right"></i></button>
+                            <button type="button" title="وسط‌چین" onclick="rte('justifyCenter')"><i class="fas fa-align-center"></i></button>
+                            <button type="button" title="چپ‌چین" onclick="rte('justifyLeft')"><i class="fas fa-align-left"></i></button>
+                            <span class="rte-sep"></span>
+                            <button type="button" title="لینک" onclick="rteLink()"><i class="fas fa-link"></i></button>
+                            <button type="button" title="حذف لینک" onclick="rte('unlink')"><i class="fas fa-link-slash"></i></button>
+                            <button type="button" title="تصویر" onclick="document.getElementById('rteImgFile').click()"><i class="fas fa-image"></i></button>
+                            <button type="button" title="ویدیو (آپارات/یوتیوب)" onclick="rteVideo()"><i class="fas fa-video"></i></button>
+                            <button type="button" title="جدول" onclick="rteTable()"><i class="fas fa-table"></i></button>
+                            <button type="button" title="نقل‌قول" onclick="rteBlock('BLOCKQUOTE')"><i class="fas fa-quote-right"></i></button>
+                            <button type="button" title="کد" onclick="rteCode()"><i class="fas fa-code"></i></button>
+                            <label class="rte-color" title="رنگ متن"><i class="fas fa-palette"></i><input type="color" onchange="rte('foreColor',this.value)" /></label>
+                            <span class="rte-sep"></span>
+                            <button type="button" title="پاک‌کردن قالب" onclick="rte('removeFormat')"><i class="fas fa-eraser"></i></button>
+                            <button type="button" title="کد HTML" onclick="rteSource()" id="rteSourceBtn"><i class="fas fa-file-code"></i></button>
+                            <button type="button" title="تمام‌صفحه" onclick="rteFull()"><i class="fas fa-expand"></i></button>
+                        </div>
+                        <div id="rte" class="rte-area" contenteditable="true" dir="rtl"></div>
+                        <textarea id="editor" class="rte-source" dir="ltr" style="display:none"></textarea>
+                        <input type="file" id="rteImgFile" accept="image/*" style="display:none" onchange="rteImagePicked(this)" />
                     </div>
-                    <%-- مقدار واقعی که به سرور می‌رود؛ قبل از Postback از CKEditor پر می‌شود --%>
+
+                    <%-- مقدار نهایی که به سرور می‌رود (قبل از Postback پر می‌شود) --%>
                     <asp:HiddenField ID="hfContent" runat="server" ClientIDMode="Static" />
+
                     <div style="margin-top:10px">
                         <span class="stat-chip"><i class="fas fa-file-word"></i> کلمات: <b id="wordCount">0</b></span>
                         <span class="stat-chip"><i class="fas fa-clock"></i> زمان مطالعه: <b id="readTime">0</b> دقیقه</span>
                         <button type="button" class="btn btn-secondary btn-sm" onclick="buildTOC();return false;"><i class="fas fa-list-ol"></i> ساخت فهرست مطالب</button>
-                        <button type="button" class="btn btn-secondary btn-sm" onclick="toggleFullscreen();return false;"><i class="fas fa-expand"></i> تمام‌صفحه</button>
                     </div>
                     <div id="tocBox" class="toc-box" style="display:none"></div>
                 </div>
@@ -425,30 +490,29 @@
         </asp:Panel>
     </asp:Panel>
 
-    <%-- ===================== CKEditor 5 + اسکریپت‌های صفحه ===================== --%>
-    <%-- CKEditor 5 از jsDelivr (در ایران معمولاً در دسترس است). در صورت بلاک بودن، نسخهٔ لوکال را جایگزین کنید. --%>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ckeditor5@44.1.0/dist/ckeditor5.css" />
-    <script src="https://cdn.jsdelivr.net/npm/ckeditor5@44.1.0/dist/ckeditor5.umd.js"></script>
+    <%-- ===================== ادیتور آفلاین + اسکریپت‌های صفحه (بدون هیچ CDN) ===================== --%>
     <script>
-        var blogEditor = null;
+        // عنصر contenteditable و textarea سورس
+        function rteEl() { return document.getElementById('rte'); }
+        function rteSrc() { return document.getElementById('editor'); }
+        var rteSourceMode = false;
 
+        // ---------- Slug و SEO ----------
         function slugify(text) {
             if (!text) return '';
             return text.toString().trim()
-                .replace(/[‌\s]+/g, '-')        // فاصله و نیم‌فاصله => خط تیره
-                .replace(/[^؀-ۿ\w\-]+/g, '') // فقط حروف فارسی/لاتین/عدد
+                .replace(/[‌\s]+/g, '-')
+                .replace(/[^؀-ۿ\w\-]+/g, '')
                 .replace(/\-\-+/g, '-')
                 .replace(/^\-+|\-+$/g, '')
                 .toLowerCase();
         }
         function genSlug() {
-            var t = document.getElementById('txtTitle').value;
-            document.getElementById('txtSlug').value = slugify(t);
+            document.getElementById('txtSlug').value = slugify(document.getElementById('txtTitle').value);
             updateSeoPreview();
         }
         function autoSlug() {
             var slug = document.getElementById('txtSlug');
-            // فقط اگر Slug خالی باشد خودکار بساز
             if (!slug.value) slug.value = slugify(document.getElementById('txtTitle').value);
             updateSeoPreview();
         }
@@ -462,30 +526,115 @@
             document.getElementById('gDesc').textContent = (md && md.value) ? md.value : 'توضیحات متا اینجا نمایش داده می‌شود...';
         }
 
-        // قبل از هر Postback، محتوای ادیتور را در hidden field بریز
-        // اگر CKEditor لود نشده بود، از متن خام textarea استفاده کن (fallback)
+        // ---------- محتوای ادیتور ----------
+        function getContent() {
+            if (rteSourceMode) return rteSrc().value;
+            return rteEl() ? rteEl().innerHTML : '';
+        }
+        // قبل از هر Postback صدا زده می‌شود
         function syncEditor() {
             var hf = document.getElementById('hfContent');
-            if (blogEditor) {
-                hf.value = blogEditor.getData();
-            } else {
-                var ta = document.getElementById('editor');
-                hf.value = ta ? ta.value : '';
-            }
+            if (hf) hf.value = getContent();
             return true;
         }
-
-        function updateCounts(words) {
+        function updateCounts() {
+            var text = rteSourceMode
+                ? rteSrc().value.replace(/<[^>]*>/g, ' ')
+                : (rteEl() ? rteEl().innerText : '');
+            var words = (text.trim().match(/\S+/g) || []).length;
             document.getElementById('wordCount').textContent = words;
             document.getElementById('readTime').textContent = Math.max(1, Math.ceil(words / 200));
         }
 
+        // ---------- دستورهای قالب‌بندی ----------
+        function rteFocus() { if (!rteSourceMode && rteEl()) rteEl().focus(); }
+        function rte(cmd, val) {
+            rteFocus();
+            try { document.execCommand(cmd, false, val || null); } catch (e) { }
+            updateCounts();
+        }
+        function rteBlock(tag) {
+            if (!tag) return;
+            rteFocus();
+            try { document.execCommand('formatBlock', false, tag); } catch (e) { }
+            updateCounts();
+        }
+        function rteInsertHTML(html) {
+            rteFocus();
+            try { document.execCommand('insertHTML', false, html); }
+            catch (e) { if (rteEl()) rteEl().innerHTML += html; }
+            updateCounts();
+        }
+        function rteLink() {
+            var url = prompt('آدرس لینک را وارد کنید:', 'https://');
+            if (url) rte('createLink', url);
+        }
+        function rteImagePicked(input) {
+            var f = input.files && input.files[0];
+            if (!f) return;
+            var reader = new FileReader();
+            reader.onload = function (e) { rteInsertHTML('<img src="' + e.target.result + '" alt="" />'); };
+            reader.readAsDataURL(f);
+            input.value = '';
+        }
+        function rteVideo() {
+            var url = prompt('لینک ویدیو (آپارات یا یوتیوب):', 'https://');
+            if (!url) return;
+            var embed = '';
+            var yt = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/))([\w\-]{6,})/);
+            var ap = url.match(/aparat\.com\/v\/([\w\d]+)/i);
+            if (yt) embed = 'https://www.youtube.com/embed/' + yt[1];
+            else if (ap) embed = 'https://www.aparat.com/video/video/embed/videohash/' + ap[1] + '/vt/frame';
+            if (embed) rteInsertHTML('<div class="video-embed"><iframe width="560" height="315" src="' + embed + '" frameborder="0" allowfullscreen></iframe></div>');
+            else rteInsertHTML('<p><a href="' + url + '" target="_blank">' + url + '</a></p>');
+        }
+        function rteTable() {
+            var r = parseInt(prompt('تعداد ردیف‌ها:', '2'), 10);
+            var c = parseInt(prompt('تعداد ستون‌ها:', '2'), 10);
+            if (!r || !c) return;
+            var html = '<table>';
+            for (var i = 0; i < r; i++) {
+                html += '<tr>';
+                for (var j = 0; j < c; j++) html += '<td>&nbsp;</td>';
+                html += '</tr>';
+            }
+            html += '</table><p></p>';
+            rteInsertHTML(html);
+        }
+        function rteCode() {
+            var sel = window.getSelection ? window.getSelection().toString() : '';
+            rteInsertHTML('<pre><code>' + (sel ? sel.replace(/</g, '&lt;').replace(/>/g, '&gt;') : 'کد شما...') + '</code></pre><p></p>');
+        }
+        // تغییر حالت نمایش کد HTML
+        function rteSource() {
+            var el = rteEl(), src = rteSrc(), btn = document.getElementById('rteSourceBtn');
+            if (!rteSourceMode) {
+                src.value = el.innerHTML;
+                el.style.display = 'none';
+                src.style.display = 'block';
+                btn.style.color = '#667eea';
+                rteSourceMode = true;
+            } else {
+                el.innerHTML = src.value;
+                src.style.display = 'none';
+                el.style.display = 'block';
+                btn.style.color = '';
+                rteSourceMode = false;
+            }
+            updateCounts();
+        }
+        function rteFull() {
+            var w = document.getElementById('rteWrap');
+            if (w) w.classList.toggle('full');
+        }
+
+        // ---------- فهرست مطالب ----------
         function buildTOC() {
-            if (!blogEditor) return;
-            var html = blogEditor.getData();
-            var tmp = document.createElement('div'); tmp.innerHTML = html;
-            var heads = tmp.querySelectorAll('h1,h2,h3,h4,h5,h6');
-            if (!heads.length) { alert('سرفصلی (H1..H6) یافت نشد.'); return; }
+            if (rteSourceMode) rteSource(); // اول از حالت سورس خارج شو
+            var el = rteEl();
+            if (!el) return;
+            var heads = el.querySelectorAll('h1,h2,h3,h4,h5,h6');
+            if (!heads.length) { alert('سرفصلی (H1..H6) یافت نشد. ابتدا چند سرتیتر اضافه کنید.'); return; }
             var toc = '<nav class="article-toc"><b>فهرست مطالب</b><ul>';
             heads.forEach(function (h, i) {
                 var id = 'sec-' + (i + 1);
@@ -494,102 +643,28 @@
                 toc += '<li style="margin-right:' + ((lvl - 1) * 14) + 'px"><a href="#' + id + '">' + h.textContent + '</a></li>';
             });
             toc += '</ul></nav>';
-            // نمایش پیش‌نمایش
             var box = document.getElementById('tocBox');
             box.style.display = 'block';
             box.innerHTML = toc;
-            // درج در ابتدای محتوا
-            blogEditor.setData(toc + tmp.innerHTML);
+            el.innerHTML = toc + el.innerHTML;  // درج در ابتدای محتوا
+            updateCounts();
         }
 
-        function toggleFullscreen() {
-            var el = document.querySelector('.ck-editor');
-            if (el) el.classList.toggle('ck-fullscreen');
-        }
-
-        // راه‌اندازی CKEditor 5
+        // ---------- راه‌اندازی ----------
         function initEditor() {
-            var ta = document.getElementById('editor');
-            if (!ta) return;
-            // مقدار اولیه (هنگام ویرایش) را داخل textarea بگذار تا هم ادیتور آن را بخواند و هم fallback داشته باشیم
+            var el = rteEl();
+            if (!el) return;
+            // مقدار اولیه (هنگام ویرایش) از hidden field
             var initial = document.getElementById('hfContent').value;
-            if (initial && !ta.value) ta.value = initial;
-
-            // اگر اسکریپت CKEditor لود نشده بود، textarea ساده باقی می‌ماند و پیام هشدار نشان داده می‌شود
-            if (typeof CKEDITOR === 'undefined') {
-                document.getElementById('editorFallbackNote').style.display = 'block';
-                return;
-            }
-            const {
-                ClassicEditor, Essentials, Paragraph, Heading, Bold, Italic, Underline,
-                Autoformat, PasteFromOffice, Link, LinkImage, BlockQuote, CodeBlock, List, Indent,
-                Table, TableToolbar, TableColumnResize, TableCaption,
-                Image, ImageToolbar, ImageCaption, ImageStyle, ImageResize, ImageInsert,
-                ImageUpload, ImageBlock, ImageInline, AutoImage, Base64UploadAdapter,
-                MediaEmbed, SourceEditing, GeneralHtmlSupport, HtmlEmbed, WordCount, Alignment, Font, RemoveFormat
-            } = CKEDITOR;
-
-            ClassicEditor.create(ta, {
-                licenseKey: 'GPL',
-                plugins: [
-                    Essentials, Paragraph, Heading, Bold, Italic, Underline,
-                    Autoformat, PasteFromOffice, Link, LinkImage, BlockQuote, CodeBlock, List, Indent,
-                    Table, TableToolbar, TableColumnResize, TableCaption,
-                    Image, ImageToolbar, ImageCaption, ImageStyle, ImageResize, ImageInsert,
-                    ImageUpload, ImageBlock, ImageInline, AutoImage, Base64UploadAdapter,
-                    MediaEmbed, SourceEditing, GeneralHtmlSupport, HtmlEmbed, WordCount, Alignment, Font, RemoveFormat
-                ],
-                toolbar: {
-                    items: [
-                        'undo', 'redo', '|',
-                        'heading', '|',
-                        'bold', 'italic', 'underline', 'removeFormat', '|',
-                        'fontColor', 'fontBackgroundColor', 'alignment', '|',
-                        'link', 'blockQuote', 'codeBlock', '|',
-                        'bulletedList', 'numberedList', 'outdent', 'indent', '|',
-                        'insertTable', 'insertImage', 'mediaEmbed', 'htmlEmbed', '|',
-                        'sourceEditing'
-                    ],
-                    shouldNotGroupWhenFull: true
-                },
-                heading: {
-                    options: [
-                        { model: 'paragraph', title: 'پاراگراف', class: 'ck-heading_paragraph' },
-                        { model: 'heading1', view: 'h1', title: 'H1', class: 'ck-heading_heading1' },
-                        { model: 'heading2', view: 'h2', title: 'H2', class: 'ck-heading_heading2' },
-                        { model: 'heading3', view: 'h3', title: 'H3', class: 'ck-heading_heading3' },
-                        { model: 'heading4', view: 'h4', title: 'H4', class: 'ck-heading_heading4' },
-                        { model: 'heading5', view: 'h5', title: 'H5', class: 'ck-heading_heading5' },
-                        { model: 'heading6', view: 'h6', title: 'H6', class: 'ck-heading_heading6' }
-                    ]
-                },
-                image: { toolbar: ['imageTextAlternative', 'toggleImageCaption', 'imageStyle:inline', 'imageStyle:block', 'imageStyle:side', 'resizeImage'] },
-                table: { contentToolbar: ['tableColumn', 'tableRow', 'mergeTableCells', 'toggleTableCaption'] },
-                mediaEmbed: { previewsInData: true },
-                htmlSupport: { allow: [{ name: /.*/, attributes: true, classes: true, styles: true }] },
-                language: { content: 'fa' }
-            }).then(function (editor) {
-                blogEditor = editor;
-                // مقدار اولیه از خود textarea خوانده می‌شود (در initEditor ست شد)
-                // شمارش کلمات
-                try {
-                    var wc = editor.plugins.get('WordCount');
-                    updateCounts(wc.words);
-                    wc.on('update', function (evt, stats) { updateCounts(stats.words); });
-                } catch (e) { }
-            }).catch(function (err) {
-                // اگر ادیتور بالا نیامد، textarea ساده را نشان بده و خطا را گزارش کن
-                console.error('CKEditor init error:', err);
-                document.getElementById('editorFallbackNote').style.display = 'block';
-                document.getElementById('editorFallbackNote').textContent =
-                    'خطا در راه‌اندازی ادیتور: ' + (err && err.message ? err.message : err) +
-                    ' — می‌توانید محتوای HTML را در همین کادر بنویسید.';
-            });
+            if (initial) el.innerHTML = initial;
+            el.setAttribute('data-ph', 'متن مقاله را اینجا بنویسید...');
+            el.addEventListener('input', updateCounts);
+            el.addEventListener('blur', syncEditor);
+            updateCounts();
         }
 
-        // اجرا پس از بارگذاری (سازگار با Postback های ASP.NET)
         function pageInit() {
-            if (document.getElementById('editor')) { initEditor(); updateSeoPreview(); }
+            if (document.getElementById('rte')) { initEditor(); updateSeoPreview(); }
             setupDropzone();
         }
         function setupDropzone() {
@@ -600,7 +675,7 @@
             ['dragleave', 'drop'].forEach(function (e) { dz.addEventListener(e, function (ev) { ev.preventDefault(); dz.classList.remove('drag'); }); });
             dz.addEventListener('drop', function (ev) {
                 if (ev.dataTransfer && ev.dataTransfer.files.length) {
-                    fu.files = ev.dataTransfer.files; // انتقال فایل‌ها به کنترل آپلود
+                    try { fu.files = ev.dataTransfer.files; } catch (e) { }
                 }
             });
         }
