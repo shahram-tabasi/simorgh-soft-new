@@ -1,5 +1,9 @@
 <%@ Page Title="" Language="C#" MasterPageFile="~/Admin/Admin.master" AutoEventWireup="true"
-    CodeFile="BlogPosts.aspx.cs" Inherits="Admin_BlogPosts" %>
+    CodeFile="BlogPosts.aspx.cs" Inherits="Admin_BlogPosts"
+    EnableEventValidation="false" ValidateRequest="false" %>
+<%-- EnableEventValidation=false : کلیک روی دکمه‌های پویا (صفحه‌بندی/Repeater) را تضمین می‌کند
+     ValidateRequest=false       : اجازهٔ ذخیرهٔ محتوای HTML ادیتور را می‌دهد
+     (در صورت نیاز در web.config: <httpRuntime requestValidationMode="2.0" />) --%>
 
 <%-- =====================================================================
      عنوان صفحه (داخل تگ title مستر)
@@ -518,9 +522,10 @@
             }
             const {
                 ClassicEditor, Essentials, Paragraph, Heading, Bold, Italic, Underline,
-                Link, BlockQuote, CodeBlock, List, Indent,
+                Autoformat, PasteFromOffice, Link, LinkImage, BlockQuote, CodeBlock, List, Indent,
                 Table, TableToolbar, TableColumnResize, TableCaption,
-                Image, ImageToolbar, ImageCaption, ImageStyle, ImageResize, ImageInsert, Base64UploadAdapter,
+                Image, ImageToolbar, ImageCaption, ImageStyle, ImageResize, ImageInsert,
+                ImageUpload, ImageBlock, ImageInline, AutoImage, Base64UploadAdapter,
                 MediaEmbed, SourceEditing, GeneralHtmlSupport, HtmlEmbed, WordCount, Alignment, Font, RemoveFormat
             } = CKEDITOR;
 
@@ -528,9 +533,10 @@
                 licenseKey: 'GPL',
                 plugins: [
                     Essentials, Paragraph, Heading, Bold, Italic, Underline,
-                    Link, BlockQuote, CodeBlock, List, Indent,
+                    Autoformat, PasteFromOffice, Link, LinkImage, BlockQuote, CodeBlock, List, Indent,
                     Table, TableToolbar, TableColumnResize, TableCaption,
-                    Image, ImageToolbar, ImageCaption, ImageStyle, ImageResize, ImageInsert, Base64UploadAdapter,
+                    Image, ImageToolbar, ImageCaption, ImageStyle, ImageResize, ImageInsert,
+                    ImageUpload, ImageBlock, ImageInline, AutoImage, Base64UploadAdapter,
                     MediaEmbed, SourceEditing, GeneralHtmlSupport, HtmlEmbed, WordCount, Alignment, Font, RemoveFormat
                 ],
                 toolbar: {
@@ -571,7 +577,14 @@
                     updateCounts(wc.words);
                     wc.on('update', function (evt, stats) { updateCounts(stats.words); });
                 } catch (e) { }
-            }).catch(function (err) { console.error(err); });
+            }).catch(function (err) {
+                // اگر ادیتور بالا نیامد، textarea ساده را نشان بده و خطا را گزارش کن
+                console.error('CKEditor init error:', err);
+                document.getElementById('editorFallbackNote').style.display = 'block';
+                document.getElementById('editorFallbackNote').textContent =
+                    'خطا در راه‌اندازی ادیتور: ' + (err && err.message ? err.message : err) +
+                    ' — می‌توانید محتوای HTML را در همین کادر بنویسید.';
+            });
         }
 
         // اجرا پس از بارگذاری (سازگار با Postback های ASP.NET)
