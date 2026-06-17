@@ -26,15 +26,15 @@ ContentPlaceHolderهای همان MasterPage قرار گرفته است
 در `BlogPosts.aspx.cs` ثابت زیر را با نام رشتهٔ اتصال پروژهٔ خودتان مطابقت دهید:
 
 ```csharp
-private const string ConnName = "SimorghConnectionString";
+private const string ConnName = "ShopDB";
 ```
 
-و مطمئن شوید در `web.config` چنین چیزی دارید:
+این نام باید با رشتهٔ اتصال موجود در `web.config` شما یکی باشد (نمونهٔ پروژهٔ شما):
 
 ```xml
 <connectionStrings>
-  <add name="SimorghConnectionString"
-       connectionString="Data Source=.;Initial Catalog=SimorghShop;Integrated Security=True"
+  <add name="ShopDB"
+       connectionString="Data Source=DESKTOP-1FOG3JP\SQLEXPRESS;Initial Catalog=MYSHOP;Integrated Security=True;Pooling=False;Connect Timeout=30"
        providerName="System.Data.SqlClient" />
 </connectionStrings>
 ```

@@ -18,7 +18,7 @@ public partial class Admin_BlogPosts : System.Web.UI.Page
     // رشتهٔ اتصال: نام رشتهٔ اتصال پروژهٔ خود را در web.config اینجا بگذارید.
     // اگر نام دیگری دارید فقط همین ثابت را تغییر دهید.
     // -----------------------------------------------------------------
-    private const string ConnName = "SimorghConnectionString";
+    private const string ConnName = "ShopDB";
 
     // پوشهٔ آپلودها (نسبت به ریشهٔ سایت)
     private const string UploadRoot = "~/Uploads/Blog/";
